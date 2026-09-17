@@ -1,0 +1,463 @@
+"use client";
+
+import { DownloadSimpleIcon, PlayIcon } from "@phosphor-icons/react";
+import dynamic from "next/dynamic";
+import {
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+
+import { downloadFile, fetchAllFiles, fetchFiles } from "@/lib/files";
+import Upload from "@/components/upload";
+
+import type { FileEntry, Pagination } from "@/lib/files";
+import type { Slide } from "yet-another-react-lightbox";
+
+const GalleryLightbox = dynamic(() => import("@/components/gallery-lightbox"), {
+  ssr: false,
+});
+
+const PAGE_SIZE = 24;
+const SKELETON_KEYS = [
+  "gallery-skeleton-1",
+  "gallery-skeleton-2",
+  "gallery-skeleton-3",
+  "gallery-skeleton-4",
+  "gallery-skeleton-5",
+  "gallery-skeleton-6",
+  "gallery-skeleton-7",
+  "gallery-skeleton-8",
+];
+
+const DEFAULT_PAGINATION: Pagination = {
+  page: 1,
+  pageSize: PAGE_SIZE,
+  total: 0,
+  totalPages: 1,
+  hasNextPage: false,
+};
+
+const preloadedPreviews = new Set<string>();
+const PRELOAD_CACHE_LIMIT = 200;
+
+export interface GalleryProps {
+  readonly className?: string;
+}
+
+export default function Gallery({ className }: GalleryProps) {
+  const [files, setFiles] = useState<FileEntry[]>([]);
+  // Full metadata list loaded once for the lightbox so the viewer can swipe
+  // through every photo; the grid keeps its own paginated `files`.
+  const [allFiles, setAllFiles] = useState<FileEntry[] | null>(null);
+  const [index, setIndex] = useState(-1);
+  const [everOpened, setEverOpened] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [error, setError] = useState("");
+  const [pagination, setPagination] = useState<Pagination>(DEFAULT_PAGINATION);
+
+  // Mirrors of state used to remap the lightbox index when the paginated list
+  // is swapped for the full list mid-view. Updated during render, like the
+  // previous `slidesRef` pattern, so the async fetch reads the latest values.
+  const filesRef = useRef(files);
+  filesRef.current = files;
+  const allFilesRef = useRef(allFiles);
+  allFilesRef.current = allFiles;
+  const indexRef = useRef(index);
+  indexRef.current = index;
+
+  const fetchedAllRef = useRef(false);
+  const allFilesControllerRef = useRef<AbortController | null>(null);
+  const lightboxOpenRef = useRef(false);
+
+  const fetchPage = useCallback(
+    async (page: number, replace: boolean, signal: AbortSignal) => {
+      if (replace) setLoading(true);
+      else setLoadingMore(true);
+      setError("");
+
+      try {
+        const { files: nextFiles, pagination: nextPagination } =
+          await fetchFiles(page, PAGE_SIZE, signal);
+        setFiles((prev) => (replace ? nextFiles : [...prev, ...nextFiles]));
+        if (nextPagination) setPagination(nextPagination);
+      } catch (err) {
+        if (err instanceof Error && err.name === "AbortError") return;
+        console.error("Fetch error:", err);
+        setError("Nie udało się pobrać galerii. Spróbuj odświeżyć stronę.");
+      } finally {
+        setLoading(false);
+        setLoadingMore(false);
+      }
+    },
+    [],
+  );
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void fetchPage(1, true, controller.signal);
+    return () => controller.abort();
+  }, [fetchPage]);
+
+  // Abort the all-files fetch if Gallery unmounts mid-load.
+  useEffect(() => () => allFilesControllerRef.current?.abort(), []);
+
+  const loadAllFiles = useCallback(async (signal: AbortSignal) => {
+    try {
+      const all = await fetchAllFiles(signal);
+      // Remap the currently-shown slide to its position in the full list so the
+      // viewer does not jump when the paginated list is swapped for the full one.
+      const currentList = allFilesRef.current ?? filesRef.current;
+      const currentName = currentList[indexRef.current]?.name;
+      let nextIndex = indexRef.current;
+      if (currentName !== undefined) {
+        const found = all.findIndex((file) => file.name === currentName);
+        if (found >= 0) nextIndex = found;
+      }
+      setAllFiles(all);
+      if (indexRef.current >= 0) setIndex(nextIndex);
+    } catch (err) {
+      if (err instanceof Error && err.name === "AbortError") return;
+      // The paginated list keeps the lightbox usable; just log the failure.
+      console.error("Fetch all files error:", err);
+    }
+  }, []);
+
+  const loadNextPage = () => {
+    if (loadingMore || !pagination.hasNextPage) return;
+    void fetchPage(pagination.page + 1, false, new AbortController().signal);
+  };
+
+  const handleDownload = useCallback((fileName: string) => {
+    void downloadFile(fileName);
+  }, []);
+
+  const handleUploaded = useCallback((file: FileEntry) => {
+    setFiles((prev) =>
+      prev.some((entry) => entry.name === file.name) ? prev : [file, ...prev],
+    );
+    setPagination((prev) => ({ ...prev, total: prev.total + 1 }));
+    // A new upload invalidates the cached full list; reload it on next open.
+    allFilesControllerRef.current?.abort();
+    setAllFiles(null);
+    fetchedAllRef.current = false;
+  }, []);
+
+  const handleOpen = useCallback(
+    (i: number) => {
+      const targetName = filesRef.current[i]?.name;
+      let lightboxIdx = i;
+      if (allFilesRef.current && targetName !== undefined) {
+        const found = allFilesRef.current.findIndex(
+          (file) => file.name === targetName,
+        );
+        if (found >= 0) lightboxIdx = found;
+      }
+
+      // Push the history entry synchronously inside the click gesture. WebKit
+      // (iOS Safari, Chrome on iOS) skips pushState entries created outside of
+      // user interaction when navigating back, so pushing it from an effect
+      // makes the back button leave the page instead of closing the lightbox.
+      if (!lightboxOpenRef.current) {
+        lightboxOpenRef.current = true;
+        window.history.pushState({ lightbox: true }, "");
+      }
+
+      setIndex(lightboxIdx);
+      setEverOpened(true);
+
+      if (allFilesRef.current === null && !fetchedAllRef.current) {
+        fetchedAllRef.current = true;
+        const controller = new AbortController();
+        allFilesControllerRef.current = controller;
+        void loadAllFiles(controller.signal);
+      }
+    },
+    [loadAllFiles],
+  );
+
+  // Manual close (X / backdrop / Escape): consume the entry pushed on open so
+  // a later back press doesn't pop a stale state.
+  const handleClose = useCallback(() => {
+    if (lightboxOpenRef.current) {
+      lightboxOpenRef.current = false;
+      window.history.back();
+    }
+    setIndex(-1);
+  }, []);
+
+  // Browser back button/gesture while the lightbox is open: close it instead
+  // of leaving the page.
+  useEffect(() => {
+    if (index < 0) return;
+    const handlePopState = () => {
+      lightboxOpenRef.current = false;
+      setIndex(-1);
+    };
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, [index]);
+
+  // The lightbox browses the full list (loaded once, on first open) so the
+  // viewer can swipe past the currently paginated grid page. Until that load
+  // resolves it falls back to the paginated list, which still covers the page
+  // the user clicked into.
+  const lightboxFiles = allFiles ?? files;
+  const slides: Slide[] = useMemo(
+    () =>
+      lightboxFiles.map((file) =>
+        file.type === "video"
+          ? {
+              type: "video",
+              sources: [
+                {
+                  src: file.previewUrl ?? file.url,
+                  type: readVideoMimeType(file),
+                },
+              ],
+            }
+          : { src: file.previewUrl ?? file.url },
+      ),
+    [lightboxFiles],
+  );
+
+  return (
+    <div className={className}>
+      <div className="mx-auto w-full sm:w-1/2">
+        <Upload onUploaded={handleUploaded} />
+      </div>
+
+      {error && <p className="mt-4 text-center text-red-700">{error}</p>}
+
+      <section aria-label="Wspomnienia">
+
+        {loading ? (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 sm:gap-4">
+            {SKELETON_KEYS.map((key) => (
+              <div
+                key={key}
+                className="skeleton-shimmer aspect-square rounded-2xl"
+              />
+            ))}
+          </div>
+        ) : files.length === 0 ? (
+          <div className="rounded-3xl border border-dashed border-terra-300 bg-white/50 px-6 py-12 text-center backdrop-blur">
+            <p className="font-display text-xl italic text-terra-700">
+              Jeszcze tu pusto…
+            </p>
+            <p className="mt-2 text-sm text-stone-500">
+              Dodaj pierwsze zdjęcie powyżej i zacznij album.
+            </p>
+          </div>
+        ) : (
+          <>
+            <GalleryGrid
+              files={files}
+              onOpen={handleOpen}
+              onDownload={handleDownload}
+            />
+
+            {pagination.hasNextPage && (
+              <div className="flex justify-center pt-8">
+                <button
+                  type="button"
+                  onClick={loadNextPage}
+                  disabled={loadingMore}
+                  className="rounded-full bg-gradient-to-r from-amber-500 to-terra-500 px-8 py-3 font-medium text-white shadow-lg shadow-terra-500/30 transition-all duration-200 hover:-translate-y-px hover:from-amber-500 hover:to-terra-600 hover:shadow-xl hover:shadow-terra-500/30 active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:translate-y-0"
+                >
+                  {loadingMore ? "Ładowanie..." : "Pokaż więcej"}
+                </button>
+              </div>
+            )}
+          </>
+        )}
+      </section>
+
+      {everOpened && (
+        <Suspense fallback={null}>
+          <GalleryLightbox
+            open={index >= 0}
+            index={index}
+            files={lightboxFiles}
+            slides={slides}
+            onClose={handleClose}
+            onIndexChange={setIndex}
+          />
+        </Suspense>
+      )}
+    </div>
+  );
+}
+
+function GalleryGrid({
+  files,
+  onOpen,
+  onDownload,
+}: {
+  readonly files: FileEntry[];
+  readonly onOpen: (i: number) => void;
+  readonly onDownload: (fileName: string) => void;
+}) {
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 sm:gap-4">
+      {files.map((file, i) => (
+        <div
+          key={file.name}
+          className="relative group [content-visibility:auto] [contain-intrinsic-size:200px]"
+        >
+          <button
+            type="button"
+            aria-label={`Otwórz ${file.type === "video" ? "film" : "zdjęcie"}`}
+            className="aspect-square overflow-hidden cursor-pointer rounded-2xl w-full bg-terra-100 ring-1 ring-terra-900/10 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-terra-900/15 hover:ring-terra-400/60"
+            onPointerEnter={() => preloadPreview(file)}
+            onFocus={() => preloadPreview(file)}
+            onClick={() => onOpen(i)}
+          >
+            {file.type === "video" ? (
+              <div className="relative w-full h-full overflow-hidden">
+                <VideoThumb
+                  src={file.previewUrl ?? file.url}
+                  fallbackSrc={file.url}
+                />
+                <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-t from-terra-950/50 via-transparent to-transparent">
+                  <span className="flex size-14 items-center justify-center rounded-full bg-white/85 shadow-lg backdrop-blur transition-transform duration-300 group-hover:scale-110">
+                    <PlayIcon
+                      size={26}
+                      weight="fill"
+                      className="ml-0.5 text-terra-600"
+                    />
+                  </span>
+                </div>
+              </div>
+            ) : (
+              // biome-ignore lint/performance/noImgElement: thumbnails come from opaque backend URLs (any storage); next/image would force remotePatterns + optimizer proxying with no benefit.
+              <img
+                src={file.thumbUrl ?? file.url}
+                alt=""
+                className="w-full h-full object-cover transition-transform duration-500 ease-out group-hover:scale-[1.06]"
+                loading={i < 4 ? "eager" : "lazy"}
+                decoding="async"
+                fetchPriority={i < 4 ? "high" : "low"}
+                width={400}
+                height={400}
+                onError={(e) => {
+                  const el = e.currentTarget;
+                  if (el.dataset.fallback === "1" || !file.url) return;
+                  el.dataset.fallback = "1";
+                  el.src = file.url;
+                }}
+              />
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={() => onDownload(file.name)}
+            className="absolute top-2 right-2 p-2 bg-black/45 text-white rounded-full shadow backdrop-blur transition-all duration-200 hover:bg-black/70 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
+            title="Pobierz"
+            aria-label="Pobierz plik"
+          >
+            <DownloadSimpleIcon size={16} weight="regular" />
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function preloadPreview(file: FileEntry) {
+  const previewUrl =
+    file.type === "image" ? (file.previewUrl ?? file.url) : undefined;
+  if (!previewUrl || preloadedPreviews.has(previewUrl)) return;
+
+  if (preloadedPreviews.size >= PRELOAD_CACHE_LIMIT) {
+    const oldest = preloadedPreviews.values().next().value;
+    if (oldest !== undefined) preloadedPreviews.delete(oldest);
+  }
+
+  preloadedPreviews.add(previewUrl);
+  const image = new Image();
+  image.decoding = "async";
+  image.src = previewUrl;
+}
+
+function VideoThumb({
+  src,
+  fallbackSrc,
+}: {
+  readonly src: string;
+  readonly fallbackSrc: string | undefined;
+}) {
+  const ref = useRef<HTMLVideoElement>(null);
+
+  // Load metadata only once the element approaches the viewport. `preload` is
+  // driven by visibility instead of list index, so prepending a new upload no
+  // longer flips already-rendered videos back to `preload="none"` and dropping
+  // their displayed frame.
+  useEffect(() => {
+    const el = ref.current;
+    if (el === null) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) {
+            el.preload = "metadata";
+            el.load();
+            observer.disconnect();
+            break;
+          }
+        }
+      },
+      { rootMargin: "300px" },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  // `#t=0.5` makes the browser seek to 0.5s and show that frame as the poster
+  // once metadata is available, instead of a black rectangle.
+  return (
+    <video
+      ref={ref}
+      src={`${src}#t=0.5`}
+      className="w-full h-full object-cover transition-transform duration-500 ease-out group-hover:scale-[1.06]"
+      muted
+      preload="none"
+      playsInline
+      width={400}
+      height={400}
+      onError={(e) => {
+        const el = e.currentTarget;
+        if (el.dataset.fallback === "1" || !fallbackSrc) return;
+        el.dataset.fallback = "1";
+        el.src = `${fallbackSrc}#t=0.5`;
+      }}
+    />
+  );
+}
+
+function readVideoMimeType(file: FileEntry): string {
+  const mime = typeof file.mimeType === "string" ? file.mimeType : "";
+  if (mime.startsWith("video/")) {
+    // iPhone `.mov` (QuickTime container) frequently holds H.264 that every
+    // browser can play, but `canPlayType("video/quicktime")` returns "" in
+    // Chrome/Firefox, so the lightbox video plugin refuses to load the source.
+    // Remap to `video/mp4` (same ISO-BMFF container) so playback is actually
+    // attempted. HEVC-in-mov stays undecodable regardless of label; that case
+    // is handled by upload-side conversion in `lib/convert.ts`.
+    if (mime === "video/quicktime") return "video/mp4";
+    return mime;
+  }
+  if (/\.mov$/i.test(file.name)) return "video/mp4";
+  if (/\.webm$/i.test(file.name)) return "video/webm";
+  if (/\.3gp$/i.test(file.name)) return "video/3gpp";
+  if (/\.3g2$/i.test(file.name)) return "video/3gpp2";
+  if (/\.hevc$/i.test(file.name)) return "video/hevc";
+  if (/\.h265$/i.test(file.name)) return "video/h265";
+  if (/\.m4v$/i.test(file.name)) return "video/mp4";
+  if (/\.mkv$/i.test(file.name)) return "video/x-matroska";
+  return "video/mp4";
+}

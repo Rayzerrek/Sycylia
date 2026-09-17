@@ -1,0 +1,331 @@
+"use client";
+
+import { UploadSimpleIcon } from "@phosphor-icons/react";
+import { useRef, useState } from "react";
+
+import { apiUrl } from "@/lib/api";
+
+import type { ChangeEvent, DragEvent } from "react";
+import type { FileEntry, FileEntryType } from "@/lib/files";
+
+/**
+ * Direct-to-storage upload flow.
+ *
+ * The backend only signs a PUT URL (`/upload/initiate`) and reads back
+ * metadata (`/upload/finalize`); the file body is streamed straight from the
+ * browser to the object storage, so it never transits the backend. Files are
+ * uploaded as-is, with no client-side conversion.
+ */
+
+const acceptAttribute = [
+  ".jpg",
+  ".jpeg",
+  ".png",
+  ".webp",
+  ".gif",
+  ".heic",
+  ".heif",
+  ".avif",
+  ".bmp",
+  ".tiff",
+  ".tif",
+  ".mp4",
+  ".mov",
+  ".webm",
+  ".3gp",
+  ".3g2",
+  ".hevc",
+  ".h265",
+  ".m4v",
+  ".mkv",
+].join(",");
+
+const acceptedExtension =
+  /\.(jpe?g|png|webp|gif|heic|heif|avif|bmp|tiff?|mp4|mov|webm|3gp|3g2|hevc|h265|m4v|mkv)$/i;
+
+const maxFiles = 100;
+const genericContentType = "application/octet-stream";
+
+interface InitiateResponse {
+  readonly uploadUrl: string;
+  readonly method: "PUT";
+  readonly headers: Record<string, string>;
+  readonly storageName: string;
+  readonly mimeType: string;
+  readonly type: FileEntryType;
+  readonly expiresInSeconds: number;
+}
+
+interface FinalizeResponse {
+  readonly success: true;
+  readonly name: string;
+  readonly fileName: string;
+  readonly url: string;
+  readonly thumbUrl: string | undefined;
+  readonly previewUrl: string | undefined;
+  readonly mimeType: string;
+  readonly type: FileEntryType;
+  readonly createdAt: string;
+}
+
+export interface UploadProps {
+  readonly onUploaded?: (file: FileEntry) => void;
+}
+
+export default function Upload({ onUploaded }: UploadProps) {
+  const [uploading, setUploading] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const handleFiles = async (fileList: File[]) => {
+    const valid = fileList.filter(isAcceptedFile);
+    if (valid.length === 0) {
+      if (fileList.length) {
+        setError(
+          "Dozwolone są tylko zdjęcia (JPG, PNG, WebP, GIF, HEIC, AVIF, BMP, TIFF) oraz filmy (MP4, MOV, WebM, 3GP, 3G2, HEVC, M4V, MKV).",
+        );
+      }
+      return;
+    }
+
+    const skipped = Math.max(0, valid.length - maxFiles);
+    const files = valid.slice(0, maxFiles);
+
+    setUploading(true);
+    setProgress(0);
+    setError("");
+    setNotice("");
+
+    const total = files.length;
+    let failures = 0;
+
+    for (let i = 0; i < files.length; i += 1) {
+      const file = files[i];
+      try {
+        const entry = await uploadOne(file, (frac) => {
+          setProgress(Math.round(((i + frac) / total) * 100));
+        });
+        onUploaded?.(entry);
+      } catch (err) {
+        console.error("Upload error:", err);
+        failures += 1;
+        setProgress(Math.round(((i + 1) / total) * 100));
+      }
+    }
+
+    setUploading(false);
+
+    if (failures > 0) {
+      setError("Nie udało się wysłać części plików. Spróbuj ponownie.");
+    }
+    if (skipped > 0) {
+      setNotice(
+        `Wysłano ${files.length} z ${valid.length} plików. Pozostałe ${skipped} przekracza limit ${maxFiles} plików na raz — wyślij je w kolejnej partii.`,
+      );
+    }
+  };
+
+  const handleDrop = (e: DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    const dropped = e.dataTransfer.files ? [...e.dataTransfer.files] : [];
+    void handleFiles(dropped);
+  };
+
+  const handleFileSelect = (e: ChangeEvent<HTMLInputElement>) => {
+    const selected = e.target.files ? [...e.target.files] : [];
+    void handleFiles(selected);
+    e.target.value = "";
+  };
+
+  return (
+    // biome-ignore lint/a11y/noStaticElementInteractions: file dropzone — keyboard users get the equivalent button + file input below.
+    <div
+      className={`flex flex-col items-center justify-center border-2 border-dashed rounded-3xl p-6 sm:p-10 text-center shadow-xl shadow-terra-500/10 backdrop-blur transition-all duration-300 ${
+        dragOver
+          ? "border-terra-500 bg-sun-200/60 shadow-2xl shadow-terra-500/20 scale-[1.01]"
+          : "border-terra-300 bg-white/70"
+      }`}
+      onDragOver={(e) => {
+        e.preventDefault();
+        setDragOver(true);
+      }}
+      onDragLeave={() => setDragOver(false)}
+      onDrop={handleDrop}
+    >
+      {uploading ? (
+        // biome-ignore lint/a11y/useSemanticElements: role="status" live region is the correct pattern here, not <output>.
+        <div
+          className="flex flex-col items-center gap-4 w-full max-w-xs"
+          role="status"
+          aria-live="polite"
+        >
+          <CircularProgress value={progress} />
+          <span className="text-terra-600 font-medium text-center animate-pulse">
+            Trwa wysyłanie plików... Nie wyłączaj strony!
+          </span>
+        </div>
+      ) : (
+        <>
+          <span
+            aria-hidden="true"
+            className="mb-4 hidden size-14 items-center justify-center rounded-full bg-gradient-to-br from-sun-400 to-terra-500 text-white shadow-lg shadow-terra-500/30 sm:flex"
+          >
+            <UploadSimpleIcon size={26} weight="regular" />
+          </span>
+          <p className="text-stone-500 mb-4 text-sm sm:text-base hidden sm:block">
+            Przeciągnij zdjęcia lub filmy tutaj
+          </p>
+          <button
+            type="button"
+            className="flex items-center justify-center gap-2 rounded-full bg-gradient-to-r from-amber-500 to-terra-500 px-6 py-3 text-lg font-medium text-white shadow-lg shadow-terra-500/30 cursor-pointer w-full sm:w-auto transition-all duration-200 hover:-translate-y-px hover:from-amber-500 hover:to-terra-600 hover:shadow-xl hover:shadow-terra-500/30 active:translate-y-0 active:to-terra-700"
+            onClick={() => inputRef.current?.click()}
+          >
+            <UploadSimpleIcon size={24} weight="regular" />
+            Dodaj zdjęcia lub filmy
+          </button>
+          <p className="mt-3 text-xs sm:text-sm text-stone-500">
+            Maksymalnie {maxFiles} plików na raz.
+          </p>
+          <input
+            ref={inputRef}
+            type="file"
+            accept={acceptAttribute}
+            className="hidden"
+            multiple
+            onChange={handleFileSelect}
+          />
+        </>
+      )}
+      {error && (
+        <p className="mt-4 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2 max-w-sm">
+          {error}
+        </p>
+      )}
+      {notice && (
+        <p className="mt-4 text-sm text-amber-800 bg-amber-50 border border-amber-300 rounded-lg px-3 py-2 max-w-sm">
+          {notice}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function CircularProgress({ value }: { readonly value: number }) {
+  const clamped = Math.max(0, Math.min(100, value));
+  const size = 96;
+  const stroke = 8;
+  const radius = (size - stroke) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const offset = circumference - (clamped / 100) * circumference;
+  return (
+    <div className="relative" style={{ width: size, height: size }}>
+      <svg
+        width={size}
+        height={size}
+        viewBox={`0 0 ${size} ${size}`}
+        className="-rotate-90"
+      >
+        <title>Postęp wysyłania</title>
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          fill="none"
+          stroke="rgb(250 231 210)"
+          strokeWidth={stroke}
+        />
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          fill="none"
+          stroke="rgb(211 97 31)"
+          strokeWidth={stroke}
+          strokeLinecap="round"
+          strokeDasharray={circumference}
+          strokeDashoffset={offset}
+          className="transition-[stroke-dashoffset] duration-200 ease-out"
+        />
+      </svg>
+      <span className="absolute inset-0 flex items-center justify-center text-terra-700 text-sm font-semibold tabular-nums">
+        {Math.round(clamped)}%
+      </span>
+    </div>
+  );
+}
+
+function isAcceptedFile(file: File): boolean {
+  return acceptedExtension.test(file.name);
+}
+
+async function uploadOne(
+  file: File,
+  onProgress: (fraction: number) => void,
+): Promise<FileEntry> {
+  const initiateRes = await fetch(apiUrl("/upload/initiate"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      fileName: file.name,
+      contentType: file.type || genericContentType,
+    }),
+  });
+  if (!initiateRes.ok) {
+    throw new Error(`initiate ${initiateRes.status} for ${file.name}`);
+  }
+  const initiated = (await initiateRes.json()) as InitiateResponse;
+
+  await putToStorage(initiated.uploadUrl, file, initiated.headers, onProgress);
+
+  const finalizeRes = await fetch(apiUrl("/upload/finalize"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ storageName: initiated.storageName }),
+  });
+  if (!finalizeRes.ok) {
+    throw new Error(`finalize ${finalizeRes.status} for ${file.name}`);
+  }
+  const finalized = (await finalizeRes.json()) as FinalizeResponse;
+  return {
+    name: finalized.name,
+    url: finalized.url,
+    thumbUrl: finalized.thumbUrl,
+    previewUrl: finalized.previewUrl,
+    mimeType: finalized.mimeType,
+    type: finalized.type,
+    createdAt: finalized.createdAt,
+  };
+}
+
+function putToStorage(
+  url: string,
+  file: File,
+  headers: Record<string, string>,
+  onProgress: (fraction: number) => void,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("PUT", url);
+    for (const [name, value] of Object.entries(headers)) {
+      xhr.setRequestHeader(name, value);
+    }
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable && event.total > 0) {
+        onProgress(event.loaded / event.total);
+      }
+    };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve();
+        return;
+      }
+      reject(new Error(`Storage PUT ${xhr.status}`));
+    };
+    xhr.onerror = () => reject(new Error("Błąd wysyłania pliku do magazynu"));
+    xhr.send(file);
+  });
+}

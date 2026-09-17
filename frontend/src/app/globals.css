@@ -1,26 +1,243 @@
 @import "tailwindcss";
 
+@theme {
+  --font-sans: "Outfit", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Fraunces", ui-serif, Georgia, serif;
+
+  /* Sun-baked terracotta */
+  --color-terra-50: #fdf5ec;
+  --color-terra-100: #fae7d2;
+  --color-terra-200: #f4c9a1;
+  --color-terra-300: #eba26d;
+  --color-terra-400: #e07f3e;
+  --color-terra-500: #d3611f;
+  --color-terra-600: #b34d15;
+  --color-terra-700: #8c3c14;
+  --color-terra-800: #6f3014;
+  --color-terra-900: #572712;
+
+  /* Tyrrhenian azure */
+  --color-sea-50: #eff9ff;
+  --color-sea-100: #d9f0fd;
+  --color-sea-200: #b0e2fb;
+  --color-sea-300: #75cdf8;
+  --color-sea-400: #33b3f1;
+  --color-sea-500: #0f9ad8;
+  --color-sea-600: #0b7cb0;
+  --color-sea-700: #0e648d;
+
+  /* Citrus sun */
+  --color-sun-200: #fef0c7;
+  --color-sun-300: #fcd34d;
+  --color-sun-400: #fbbf24;
+  --color-sun-500: #f59e0b;
+  --color-sun-600: #d97706;
+}
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  font-family: "Outfit", system-ui, sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+html {
+  min-height: 100%;
+  background: #fffbeb;
+  /* The custom overlay scrollbar (see components/scrollbar.tsx) replaces the
+     native one, so hide the native scrollbar but keep scrolling intact. */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html::-webkit-scrollbar {
+  display: none;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  margin: 0;
+  min-height: 100%;
+  overscroll-behavior-y: none;
+  -webkit-tap-highlight-color: transparent;
+  /* Sicily: paper grain over sun-baked gold melting into Tyrrhenian azure.
+     Fixed so the wash never bands while scrolling. */
+  background-color: #fff8ec;
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='0.05'/%3E%3C/svg%3E"),
+    radial-gradient(
+      48rem 26rem at 82% -6rem,
+      rgb(253 224 71 / 0.35),
+      transparent 65%
+    ),
+    radial-gradient(
+      40rem 24rem at 8% 108%,
+      rgb(125 211 252 / 0.28),
+      transparent 65%
+    ),
+    radial-gradient(
+      30rem 20rem at 50% 45%,
+      rgb(251 146 60 / 0.1),
+      transparent 70%
+    ),
+    linear-gradient(180deg, #fffbeb 0%, #fef3c7 38%, #ffedd5 68%, #e0f2fd 135%);
+  background-attachment: fixed;
+}
+
+::selection {
+  background: #fed7aa;
+  color: #572712;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+button,
+[type="button"],
+[type="file"]::file-selector-button {
+  -webkit-appearance: none;
+  appearance: none;
+  touch-action: manipulation;
+}
+
+:focus-visible {
+  outline: 2px solid #d3611f;
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+img,
+video {
+  max-width: 100%;
+}
+
+.font-serif {
+  font-family: "Outfit", system-ui, sans-serif;
+}
+
+.app-shell {
+  min-height: 100vh;
+  min-height: 100svh;
+  padding-top: max(2rem, env(safe-area-inset-top));
+  padding-bottom: max(2rem, env(safe-area-inset-bottom));
+  padding-left: max(1rem, env(safe-area-inset-left));
+  padding-right: max(1rem, env(safe-area-inset-right));
+}
+
+@supports (min-height: 100dvh) {
+  .app-shell {
+    min-height: 100dvh;
+  }
+}
+
+@media (min-width: 640px) {
+  .app-shell {
+    padding-left: max(1.5rem, env(safe-area-inset-left));
+    padding-right: max(1.5rem, env(safe-area-inset-right));
+  }
+}
+
+@media (min-width: 1024px) {
+  .app-shell {
+    padding-left: max(2rem, env(safe-area-inset-left));
+    padding-right: max(2rem, env(safe-area-inset-right));
+  }
+}
+
+/* Orchestrated page-load reveal: elements fade up in sequence via inline
+   animation-delay. Respects reduced motion. */
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.reveal {
+  opacity: 0;
+  animation: rise 0.7s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+/* Paper sun: the ray ring turns slowly, each ray twinkles in sequence, and
+   the core gently breathes. transform-box keeps SVG rotation centered. */
+@keyframes spin-slow {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.sun-rays {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: spin-slow 48s linear infinite;
+}
+
+@keyframes ray-twinkle {
+  0%,
+  100% {
+    opacity: 0.3;
+  }
+  50% {
+    opacity: 0.8;
+  }
+}
+
+.sun-ray {
+  animation: ray-twinkle 4.2s ease-in-out infinite;
+}
+
+@keyframes sun-breathe {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.85;
+  }
+  50% {
+    transform: scale(1.07);
+    opacity: 1;
+  }
+}
+
+.sun-core {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: sun-breathe 6s ease-in-out infinite;
+}
+
+/* Shimmering gallery skeletons while the first page loads. */
+@keyframes shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+.skeleton-shimmer {
+  background: linear-gradient(100deg, #fae7d2 35%, #fffdf5 50%, #fae7d2 65%);
+  background-size: 200% 100%;
+  animation: shimmer 1.8s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal {
+    opacity: 1;
+    animation: none;
+  }
+  .sun-rays,
+  .sun-ray,
+  .sun-core,
+  .skeleton-shimmer {
+    animation: none;
+  }
 }
