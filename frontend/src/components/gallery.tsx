@@ -260,7 +260,7 @@ export default function Gallery({ className }: GalleryProps) {
                 <h2 className="mb-6 text-3xl font-display font-semibold tracking-tight text-terra-900 text-center sm:text-left">
                   Nowości
                 </h2>
-                <div className="flex gap-4 overflow-x-auto pb-6 snap-x snap-mandatory [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden px-2 sm:px-0">
+                <div className="flex gap-4 overflow-x-auto pb-6 snap-x snap-mandatory px-2 sm:px-0 [scrollbar-width:thin] [scrollbar-color:theme(colors.orange.500)_transparent] [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar-track]:bg-amber-950/10 [&::-webkit-scrollbar-track]:rounded-full [&::-webkit-scrollbar-thumb]:bg-gradient-to-r [&::-webkit-scrollbar-thumb]:from-yellow-300 [&::-webkit-scrollbar-thumb]:via-orange-500 [&::-webkit-scrollbar-thumb]:to-rose-500 [&::-webkit-scrollbar-thumb]:rounded-full">
                   {files.slice(0, 8).map((file, i) => (
                     <div
                       key={file.name}

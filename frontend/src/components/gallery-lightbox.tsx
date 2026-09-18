@@ -2,6 +2,7 @@
 
 import { DownloadSimpleIcon } from "@phosphor-icons/react";
 import Lightbox from "yet-another-react-lightbox";
+import "yet-another-react-lightbox/styles.css";
 import Video from "yet-another-react-lightbox/plugins/video";
 
 import { downloadFile } from "@/lib/files";
