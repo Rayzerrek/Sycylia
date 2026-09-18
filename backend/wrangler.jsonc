@@ -1,0 +1,48 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "sycylia",
+  "main": "src/index.ts",
+  "account_id": "3c93b13977f3098ec2cfec2d4c9461dd",
+  "compatibility_date": "2026-06-28",
+  "compatibility_flags": ["nodejs_compat"],
+  "preview_urls": false,
+  "assets": {
+    "directory": "../frontend/out",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": [
+      "/health",
+      "/files",
+      "/files/*",
+      "/upload",
+      "/upload/*",
+      "/thumbnail",
+      "/thumbnail/*",
+      "/preview",
+      "/preview/*",
+      "/download",
+      "/download/*",
+      "/admin",
+      "/admin/*",
+    ]
+  },
+  "images": {
+    "binding": "IMAGES",
+  },
+  "cache": {
+    "enabled": true,
+  },
+  "vars": {
+    "FIREBASE_STORAGE_BUCKET": "sycylia-54389.firebasestorage.app",
+    "CORS_ORIGINS": "http://localhost:3000,http://localhost:8787",
+    "MAX_UPLOAD_MB": "250",
+  },
+  "observability": {
+    "enabled": true,
+    "logs": {
+      "enabled": true,
+      "invocation_logs": true,
+      "persist": true
+    },
+  },
+}

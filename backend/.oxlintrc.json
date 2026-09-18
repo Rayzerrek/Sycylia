@@ -1,0 +1,38 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "categories": {
+    "correctness": "error"
+  },
+  "plugins": ["react", "import"],
+  "rules": {
+    "sort-imports": [
+      "error",
+      { "ignoreDeclarationSort": true, "ignoreMemberSort": true }
+    ],
+    "import/namespace": "error",
+    "typescript/no-explicit-any": "error",
+    "no-unused-expressions": "off",
+    "typescript/no-deprecated": "warn",
+    "typescript/no-this-alias": "off",
+    "react-hooks/exhaustive-deps": "warn",
+    "typescript/no-non-null-assertion": "error",
+    "typescript/no-non-null-asserted-nullish-coalescing": "error",
+    "react/no-array-index-key": "error",
+    "unicorn/no-array-for-each": "error",
+    "no-unused-vars": [
+      "error",
+      {
+        "argsIgnorePattern": "^_",
+        "varsIgnorePattern": "^_",
+        "caughtErrorsIgnorePattern": "^_"
+      }
+    ]
+  },
+  "ignorePatterns": [
+    "**/env.d.ts",
+    "**/node_modules/**",
+    "**/dist/**",
+    "**/.vite/**",
+    "**/.wrangler/**"
+  ]
+}

@@ -5,6 +5,13 @@ import { useRef, useState } from "react";
 
 import { apiUrl } from "@/lib/api";
 
+import {
+  VideoConversionError,
+  needsImageConversion,
+  needsVideoConversion,
+  prepareFileForUpload,
+} from "@/lib/convert";
+
 import type { ChangeEvent, DragEvent } from "react";
 import type { FileEntry, FileEntryType } from "@/lib/files";
 
@@ -13,8 +20,11 @@ import type { FileEntry, FileEntryType } from "@/lib/files";
  *
  * The backend only signs a PUT URL (`/upload/initiate`) and reads back
  * metadata (`/upload/finalize`); the file body is streamed straight from the
- * browser to the object storage, so it never transits the backend. Files are
- * uploaded as-is, with no client-side conversion.
+ * browser to the object storage, so it never transits the backend.
+ *
+ * iPhone HEIC photos and HEVC/MOV videos are converted in the browser to
+ * JPEG/MP4 (H.264) before upload (see `lib/convert.ts`), so every browser can
+ * display them and decode a thumbnail frame.
  */
 
 const acceptAttribute = [
@@ -101,12 +111,52 @@ export default function Upload({ onUploaded }: UploadProps) {
 
     const total = files.length;
     let failures = 0;
+    let conversionSkipped = 0;
+    let conversionMessage = "";
+    // Per-file split of the progress bar: converting files reserve 40% for the
+    // conversion phase, non-converting files spend the whole span on upload.
+    const conversionWeight = 0.4;
 
     for (let i = 0; i < files.length; i += 1) {
       const file = files[i];
+      const baseFrac = i / total;
+      const fileSpan = 1 / total;
+      const willConvert =
+        needsImageConversion(file) || needsVideoConversion(file);
+      const fileConversionWeight = willConvert ? conversionWeight : 0;
+      const fileUploadWeight = 1 - fileConversionWeight;
+
       try {
-        const entry = await uploadOne(file, (frac) => {
-          setProgress(Math.round(((i + frac) / total) * 100));
+        let prepared: File;
+        try {
+          prepared = await prepareFileForUpload(file, (frac) => {
+            setProgress(
+              Math.round(
+                (baseFrac + frac * fileConversionWeight * fileSpan) * 100,
+              ),
+            );
+          });
+        } catch (convErr) {
+          if (convErr instanceof VideoConversionError) {
+            console.error("Video conversion failed, skipping:", convErr);
+            conversionSkipped += 1;
+            if (!conversionMessage) conversionMessage = convErr.message;
+            failures += 1;
+            setProgress(Math.round(((i + 1) / total) * 100));
+            continue;
+          }
+          console.error("Conversion failed, sending original:", convErr);
+          prepared = file;
+        }
+
+        const entry = await uploadOne(prepared, (frac) => {
+          setProgress(
+            Math.round(
+              (baseFrac +
+                (fileConversionWeight + frac * fileUploadWeight) * fileSpan) *
+                100,
+            ),
+          );
         });
         onUploaded?.(entry);
       } catch (err) {
@@ -118,7 +168,14 @@ export default function Upload({ onUploaded }: UploadProps) {
 
     setUploading(false);
 
-    if (failures > 0) {
+    if (conversionSkipped > 0) {
+      setError(
+        conversionMessage +
+          (conversionSkipped > 1
+            ? ` (pominięto ${conversionSkipped} filmów)`
+            : ""),
+      );
+    } else if (failures > 0) {
       setError("Nie udało się wysłać części plików. Spróbuj ponownie.");
     }
     if (skipped > 0) {

@@ -236,11 +236,11 @@ export default function Gallery({ className }: GalleryProps) {
       <section aria-label="Wspomnienia">
 
         {loading ? (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 sm:gap-4">
-            {SKELETON_KEYS.map((key) => (
+          <div className="columns-2 sm:columns-3 md:columns-4 gap-3 sm:gap-4">
+            {SKELETON_KEYS.map((key, i) => (
               <div
                 key={key}
-                className="skeleton-shimmer aspect-square rounded-2xl"
+                className={`skeleton-shimmer rounded-2xl mb-3 sm:mb-4 break-inside-avoid ${i % 3 === 0 ? 'aspect-[3/4]' : i % 2 === 0 ? 'aspect-[4/3]' : 'aspect-square'}`}
               />
             ))}
           </div>
@@ -255,6 +255,34 @@ export default function Gallery({ className }: GalleryProps) {
           </div>
         ) : (
           <>
+            {files.length > 0 && (
+              <div className="mb-12">
+                <h2 className="mb-6 text-3xl font-display font-semibold tracking-tight text-terra-900 text-center sm:text-left">
+                  Nowości
+                </h2>
+                <div className="flex gap-4 overflow-x-auto pb-6 snap-x snap-mandatory [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden px-2 sm:px-0">
+                  {files.slice(0, 8).map((file, i) => (
+                    <div
+                      key={file.name}
+                      className="shrink-0 snap-center w-[240px] sm:w-[280px]"
+                    >
+                      <GalleryCard
+                        file={file}
+                        index={i}
+                        onOpen={handleOpen}
+                        onDownload={handleDownload}
+                        className="[contain-intrinsic-size:350px]"
+                        mediaClassName="w-full aspect-[4/5] object-cover transition-transform duration-500 ease-out group-hover:scale-[1.06]"
+                      />
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-8 mb-12 flex items-center justify-center">
+                  <div className="h-px w-full max-w-sm bg-gradient-to-r from-transparent via-terra-200 to-transparent"></div>
+                </div>
+              </div>
+            )}
+
             <GalleryGrid
               files={files}
               onOpen={handleOpen}
@@ -293,6 +321,79 @@ export default function Gallery({ className }: GalleryProps) {
   );
 }
 
+function GalleryCard({
+  file,
+  index,
+  onOpen,
+  onDownload,
+  className = "",
+  mediaClassName = "",
+}: {
+  readonly file: FileEntry;
+  readonly index: number;
+  readonly onOpen: (i: number) => void;
+  readonly onDownload: (fileName: string) => void;
+  readonly className?: string;
+  readonly mediaClassName?: string;
+}) {
+  return (
+    <div className={`relative group [content-visibility:auto] ${className}`}>
+      <button
+        type="button"
+        aria-label={`Otwórz ${file.type === "video" ? "film" : "zdjęcie"}`}
+        className="overflow-hidden cursor-pointer rounded-2xl w-full h-full flex flex-col bg-terra-100 ring-1 ring-terra-900/10 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-terra-900/15 hover:ring-terra-400/60"
+        onPointerEnter={() => preloadPreview(file)}
+        onFocus={() => preloadPreview(file)}
+        onClick={() => onOpen(index)}
+      >
+        {file.type === "video" ? (
+          <div className="relative w-full h-full overflow-hidden">
+            <VideoThumb
+              src={file.previewUrl ?? file.url}
+              fallbackSrc={file.url}
+              className={mediaClassName}
+            />
+            <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-t from-terra-950/50 via-transparent to-transparent">
+              <span className="flex size-14 items-center justify-center rounded-full bg-white/85 shadow-lg backdrop-blur transition-transform duration-300 group-hover:scale-110">
+                <PlayIcon
+                  size={26}
+                  weight="fill"
+                  className="ml-0.5 text-terra-600"
+                />
+              </span>
+            </div>
+          </div>
+        ) : (
+          // biome-ignore lint/performance/noImgElement: thumbnails come from opaque backend URLs
+          <img
+            src={file.thumbUrl ?? file.url}
+            alt=""
+            className={mediaClassName}
+            loading={index < 4 ? "eager" : "lazy"}
+            decoding="async"
+            fetchPriority={index < 4 ? "high" : "low"}
+            onError={(e) => {
+              const el = e.currentTarget;
+              if (el.dataset.fallback === "1" || !file.url) return;
+              el.dataset.fallback = "1";
+              el.src = file.url;
+            }}
+          />
+        )}
+      </button>
+      <button
+        type="button"
+        onClick={() => onDownload(file.name)}
+        className="absolute top-2 right-2 p-2 bg-black/45 text-white rounded-full shadow backdrop-blur transition-all duration-200 hover:bg-black/70 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100 z-10"
+        title="Pobierz"
+        aria-label="Pobierz plik"
+      >
+        <DownloadSimpleIcon size={16} weight="regular" />
+      </button>
+    </div>
+  );
+}
+
 function GalleryGrid({
   files,
   onOpen,
@@ -303,66 +404,17 @@ function GalleryGrid({
   readonly onDownload: (fileName: string) => void;
 }) {
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 sm:gap-4">
+    <div className="columns-2 sm:columns-3 md:columns-4 gap-3 sm:gap-4">
       {files.map((file, i) => (
-        <div
+        <GalleryCard
           key={file.name}
-          className="relative group [content-visibility:auto] [contain-intrinsic-size:200px]"
-        >
-          <button
-            type="button"
-            aria-label={`Otwórz ${file.type === "video" ? "film" : "zdjęcie"}`}
-            className="aspect-square overflow-hidden cursor-pointer rounded-2xl w-full bg-terra-100 ring-1 ring-terra-900/10 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-terra-900/15 hover:ring-terra-400/60"
-            onPointerEnter={() => preloadPreview(file)}
-            onFocus={() => preloadPreview(file)}
-            onClick={() => onOpen(i)}
-          >
-            {file.type === "video" ? (
-              <div className="relative w-full h-full overflow-hidden">
-                <VideoThumb
-                  src={file.previewUrl ?? file.url}
-                  fallbackSrc={file.url}
-                />
-                <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-t from-terra-950/50 via-transparent to-transparent">
-                  <span className="flex size-14 items-center justify-center rounded-full bg-white/85 shadow-lg backdrop-blur transition-transform duration-300 group-hover:scale-110">
-                    <PlayIcon
-                      size={26}
-                      weight="fill"
-                      className="ml-0.5 text-terra-600"
-                    />
-                  </span>
-                </div>
-              </div>
-            ) : (
-              // biome-ignore lint/performance/noImgElement: thumbnails come from opaque backend URLs (any storage); next/image would force remotePatterns + optimizer proxying with no benefit.
-              <img
-                src={file.thumbUrl ?? file.url}
-                alt=""
-                className="w-full h-full object-cover transition-transform duration-500 ease-out group-hover:scale-[1.06]"
-                loading={i < 4 ? "eager" : "lazy"}
-                decoding="async"
-                fetchPriority={i < 4 ? "high" : "low"}
-                width={400}
-                height={400}
-                onError={(e) => {
-                  const el = e.currentTarget;
-                  if (el.dataset.fallback === "1" || !file.url) return;
-                  el.dataset.fallback = "1";
-                  el.src = file.url;
-                }}
-              />
-            )}
-          </button>
-          <button
-            type="button"
-            onClick={() => onDownload(file.name)}
-            className="absolute top-2 right-2 p-2 bg-black/45 text-white rounded-full shadow backdrop-blur transition-all duration-200 hover:bg-black/70 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
-            title="Pobierz"
-            aria-label="Pobierz plik"
-          >
-            <DownloadSimpleIcon size={16} weight="regular" />
-          </button>
-        </div>
+          file={file}
+          index={i}
+          onOpen={onOpen}
+          onDownload={onDownload}
+          className="mb-3 sm:mb-4 break-inside-avoid [contain-intrinsic-size:200px]"
+          mediaClassName="w-full h-auto object-cover transition-transform duration-500 ease-out group-hover:scale-[1.06]"
+        />
       ))}
     </div>
   );
@@ -387,9 +439,11 @@ function preloadPreview(file: FileEntry) {
 function VideoThumb({
   src,
   fallbackSrc,
+  className = "",
 }: {
   readonly src: string;
   readonly fallbackSrc: string | undefined;
+  readonly className?: string;
 }) {
   const ref = useRef<HTMLVideoElement>(null);
 
@@ -423,12 +477,10 @@ function VideoThumb({
     <video
       ref={ref}
       src={`${src}#t=0.5`}
-      className="w-full h-full object-cover transition-transform duration-500 ease-out group-hover:scale-[1.06]"
+      className={className}
       muted
       preload="none"
       playsInline
-      width={400}
-      height={400}
       onError={(e) => {
         const el = e.currentTarget;
         if (el.dataset.fallback === "1" || !fallbackSrc) return;
