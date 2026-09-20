@@ -23,9 +23,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="pl"
-      className={`${outfit.variable} ${fraunces.variable} h-full antialiased`}
+      className={`${outfit.variable} ${fraunces.variable} antialiased`}
     >
-      <body className="min-h-full flex flex-col text-terra-900 selection:bg-terra-200 selection:text-terra-900">
+      <body className="min-h-screen flex flex-col text-terra-900 selection:bg-terra-200 selection:text-terra-900">
         <SmoothScroll>{children}</SmoothScroll>
       </body>
     </html>

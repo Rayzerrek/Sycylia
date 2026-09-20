@@ -4,7 +4,7 @@ import Gallery from "@/components/gallery";
 
 export default function Home() {
   return (
-    <div id="page-content" className="w-full overflow-hidden">
+    <div id="page-content" className="w-full overflow-x-hidden">
       <div className="mx-auto max-w-[1400px] px-6 sm:px-8 lg:px-12">
         <header className="relative pt-16 pb-10 sm:pt-20 sm:pb-14 mb-10 sm:mb-12 text-center">
           <h1
