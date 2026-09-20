@@ -40,14 +40,6 @@ const PRELOAD_CACHE_LIMIT = 200;
 export interface GalleryProps {
   readonly className?: string;
 }
-function useRandomHighlights(files: FileEntry[], count: number = 5): FileEntry[] {
-  // Losujemy na nowo przy każdym załadowaniu komponentu, żeby rotacja była widoczna od razu
-  return useMemo(() => {
-    if (files.length <= count) return files;
-    const shuffled = [...files].sort(() => Math.random() - 0.5);
-    return shuffled.slice(0, count);
-  }, [files, count]);
-}
 
 export default function Gallery({ className }: GalleryProps) {
   const [files, setFiles] = useState<FileEntry[]>([]);
@@ -60,6 +52,12 @@ export default function Gallery({ className }: GalleryProps) {
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState("");
   const [pagination, setPagination] = useState<Pagination>(DEFAULT_PAGINATION);
+  const randomHighlights = useMemo(() => {
+    const count = 5;
+    if (files.length <= count) return files;
+    const shuffled = [...files].sort(() => Math.random() - 0.5);
+    return shuffled.slice(0, count);
+  }, [files]);
 
   // Mirrors of state used to remap the lightbox index when the paginated list
   // is swapped for the full list mid-view. Updated during render, like the
@@ -262,7 +260,7 @@ export default function Gallery({ className }: GalleryProps) {
                   <span>Wyróżnione z galerii</span>
                 </h2>
                 <div className="flex gap-4 sm:gap-6 overflow-x-auto pb-8 snap-x snap-mandatory px-4 sm:px-0 -mx-4 sm:mx-0 [scrollbar-width:thin] [scrollbar-color:theme(colors.terra.300)_transparent] [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-terra-300 [&::-webkit-scrollbar-thumb]:rounded-full">
-                  {useRandomHighlights(files).map((file) => {
+                  {randomHighlights.map((file) => {
                     const i = files.findIndex((f) => f.name === file.name);
                     return (
                       <div
