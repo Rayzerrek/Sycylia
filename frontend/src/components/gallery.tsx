@@ -1,15 +1,7 @@
 "use client";
 
 import { DownloadSimpleIcon, PlayIcon } from "@phosphor-icons/react";
-import { useState, useRef, useEffect, useCallback, useMemo } from "react";
-import {
-  Suspense,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useState, useRef, useEffect, useCallback, useMemo, Suspense } from "react";
 
 import { downloadFile, fetchAllFiles, fetchFiles } from "@/lib/files";
 import Upload from "@/components/upload";
