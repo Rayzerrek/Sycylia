@@ -1,7 +1,7 @@
 "use client";
 
 import { DownloadSimpleIcon, PlayIcon } from "@phosphor-icons/react";
-import dynamic from "next/dynamic";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import {
   Suspense,
   useCallback,
@@ -47,32 +47,13 @@ const PRELOAD_CACHE_LIMIT = 200;
 export interface GalleryProps {
   readonly className?: string;
 }
-function getDailyHighlights(files: FileEntry[], count: number = 5): FileEntry[] {
-  if (files.length <= count) return files;
-  
-  const today = new Date();
-  const seedStr = `${today.getFullYear()}-${today.getMonth()}-${today.getDate()}`;
-  
-  let seed = 0;
-  for (let i = 0; i < seedStr.length; i++) {
-    seed = (seed << 5) - seed + seedStr.charCodeAt(i);
-    seed |= 0; 
-  }
-  
-  const random = () => {
-    let t = (seed += 0x6d2b79f5);
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-  
-  const shuffled = [...files];
-  for (let i = shuffled.length - 1; i > 0; i--) {
-    const j = Math.floor(random() * (i + 1));
-    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-  }
-  
-  return shuffled.slice(0, count);
+function useRandomHighlights(files: FileEntry[], count: number = 5): FileEntry[] {
+  // Losujemy na nowo przy każdym załadowaniu komponentu, żeby rotacja była widoczna od razu
+  return useMemo(() => {
+    if (files.length <= count) return files;
+    const shuffled = [...files].sort(() => Math.random() - 0.5);
+    return shuffled.slice(0, count);
+  }, [files, count]);
 }
 
 export default function Gallery({ className }: GalleryProps) {
@@ -285,10 +266,10 @@ export default function Gallery({ className }: GalleryProps) {
             {files.length > 0 && (
               <div className="mb-16">
                 <h2 className="mb-8 text-2xl font-display font-medium tracking-tight text-terra-900 flex items-center justify-between">
-                  <span>Wyróżnione dzisiaj</span>
+                  <span>Wyróżnione z galerii</span>
                 </h2>
-                <div className="flex gap-4 sm:gap-6 overflow-x-auto pb-8 snap-x snap-mandatory px-4 sm:px-0 -mx-4 sm:mx-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                  {getDailyHighlights(files).map((file) => {
+                <div className="flex gap-4 sm:gap-6 overflow-x-auto pb-8 snap-x snap-mandatory px-4 sm:px-0 -mx-4 sm:mx-0 [scrollbar-width:thin] [scrollbar-color:theme(colors.terra.300)_transparent] [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-terra-300 [&::-webkit-scrollbar-thumb]:rounded-full">
+                  {useRandomHighlights(files).map((file) => {
                     const i = files.findIndex((f) => f.name === file.name);
                     return (
                       <div
@@ -366,7 +347,7 @@ function GalleryCard({
   readonly mediaClassName?: string;
 }) {
   return (
-    <div className={`relative group [content-visibility:auto] ${className}`}>
+    <div className={`relative group ${className}`}>
       <button
         type="button"
         aria-label={`Otwórz ${file.type === "video" ? "film" : "zdjęcie"}`}
