@@ -1,6 +1,7 @@
 "use client";
 
 import { DownloadSimpleIcon, PlayIcon } from "@phosphor-icons/react";
+import dynamic from "next/dynamic";
 import { useState, useRef, useEffect, useCallback, useMemo, Suspense } from "react";
 
 import { downloadFile, fetchAllFiles, fetchFiles } from "@/lib/files";
