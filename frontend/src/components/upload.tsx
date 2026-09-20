@@ -201,10 +201,10 @@ export default function Upload({ onUploaded }: UploadProps) {
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: file dropzone — keyboard users get the equivalent button + file input below.
     <div
-      className={`flex flex-col items-center justify-center border-2 border-dashed rounded-3xl p-6 sm:p-10 text-center shadow-xl shadow-terra-500/10 backdrop-blur transition-all duration-300 ${
+      className={`relative flex flex-col items-center justify-center border-2 border-dashed rounded-2xl p-8 sm:p-10 text-center transition-all duration-300 group ${
         dragOver
-          ? "border-terra-500 bg-sun-200/60 shadow-2xl shadow-terra-500/20 scale-[1.01]"
-          : "border-terra-300 bg-white/70"
+          ? "border-terra-500 bg-white/80 scale-[1.01] shadow-xl shadow-terra-900/5"
+          : "border-terra-900/20 bg-white/40 hover:bg-white/60 hover:border-terra-400/50"
       }`}
       onDragOver={(e) => {
         e.preventDefault();
@@ -229,23 +229,26 @@ export default function Upload({ onUploaded }: UploadProps) {
         <>
           <span
             aria-hidden="true"
-            className="mb-4 hidden size-14 items-center justify-center rounded-full bg-gradient-to-br from-sun-400 to-terra-500 text-white shadow-lg shadow-terra-500/30 sm:flex"
+            className="mb-5 hidden sm:flex size-14 items-center justify-center rounded-full bg-terra-100 text-terra-600 group-hover:bg-terra-200 group-hover:text-terra-700 transition-colors duration-300"
           >
-            <UploadSimpleIcon size={26} weight="regular" />
+            <UploadSimpleIcon size={28} weight="light" />
           </span>
-          <p className="text-stone-500 mb-4 text-sm sm:text-base hidden sm:block">
-            Przeciągnij zdjęcia lub filmy tutaj
+          <h3 className="font-display text-xl text-terra-900 mb-1">
+            Prześlij zdjęcia lub filmy
+          </h3>
+          <p className="text-terra-900/60 mb-6 text-sm font-sans">
+            Przeciągnij pliki tutaj lub wybierz z dysku
           </p>
           <button
             type="button"
-            className="flex items-center justify-center gap-2 rounded-full bg-gradient-to-r from-amber-500 to-terra-500 px-6 py-3 text-lg font-medium text-white shadow-lg shadow-terra-500/30 cursor-pointer w-full sm:w-auto transition-all duration-200 hover:-translate-y-px hover:from-amber-500 hover:to-terra-600 hover:shadow-xl hover:shadow-terra-500/30 active:translate-y-0 active:to-terra-700"
+            className="flex items-center justify-center gap-2 rounded-full bg-terra-500 px-7 py-3.5 text-base font-medium text-white shadow-md shadow-terra-500/20 cursor-pointer w-full sm:w-auto transition-all duration-300 hover:bg-terra-600 hover:scale-105 active:scale-100"
             onClick={() => inputRef.current?.click()}
           >
-            <UploadSimpleIcon size={24} weight="regular" />
-            Dodaj zdjęcia lub filmy
+            <UploadSimpleIcon size={20} weight="regular" />
+            Wybierz pliki
           </button>
-          <p className="mt-3 text-xs sm:text-sm text-stone-500">
-            Maksymalnie {maxFiles} plików na raz.
+          <p className="mt-4 text-xs text-terra-900/50">
+            Maksymalnie {maxFiles} plików naraz
           </p>
           <input
             ref={inputRef}

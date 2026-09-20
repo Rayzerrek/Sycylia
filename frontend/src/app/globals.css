@@ -45,9 +45,6 @@
 
 html {
   min-height: 100%;
-  background: #fffbeb;
-  /* The custom overlay scrollbar (see components/scrollbar.tsx) replaces the
-     native one, so hide the native scrollbar but keep scrolling intact. */
   scrollbar-width: none;
   -ms-overflow-style: none;
 }
@@ -59,32 +56,14 @@ html::-webkit-scrollbar {
 body {
   margin: 0;
   min-height: 100%;
-  overscroll-behavior-y: none;
   -webkit-tap-highlight-color: transparent;
-  /* Sicily: paper grain over sun-baked gold melting into Tyrrhenian azure.
-     Fixed so the wash never bands while scrolling. */
-  background-color: #fff8ec;
-  background-image:
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='0.05'/%3E%3C/svg%3E"),
-    radial-gradient(
-      48rem 26rem at 82% -6rem,
-      rgb(253 224 71 / 0.35),
-      transparent 65%
-    ),
-    radial-gradient(
-      40rem 24rem at 8% 108%,
-      rgb(125 211 252 / 0.28),
-      transparent 65%
-    ),
-    radial-gradient(
-      30rem 20rem at 50% 45%,
-      rgb(251 146 60 / 0.1),
-      transparent 70%
-    ),
-    linear-gradient(180deg, #fffbeb 0%, #fef3c7 38%, #ffedd5 68%, #e0f2fd 135%);
+  background-color: #F7F4EE;
+  background-image: 
+    radial-gradient(90% 90% at 85% 0%, rgba(235, 162, 109, 0.75) 0%, transparent 85%),
+    radial-gradient(90% 90% at 5% 95%, rgba(252, 211, 77, 0.65) 0%, transparent 85%),
+    radial-gradient(110% 110% at 50% 40%, rgba(244, 201, 161, 0.5) 0%, transparent 90%);
   background-attachment: fixed;
 }
-
 ::selection {
   background: #fed7aa;
   color: #572712;
@@ -117,36 +96,7 @@ video {
 }
 
 .font-serif {
-  font-family: "Outfit", system-ui, sans-serif;
-}
-
-.app-shell {
-  min-height: 100vh;
-  min-height: 100svh;
-  padding-top: max(2rem, env(safe-area-inset-top));
-  padding-bottom: max(2rem, env(safe-area-inset-bottom));
-  padding-left: max(1rem, env(safe-area-inset-left));
-  padding-right: max(1rem, env(safe-area-inset-right));
-}
-
-@supports (min-height: 100dvh) {
-  .app-shell {
-    min-height: 100dvh;
-  }
-}
-
-@media (min-width: 640px) {
-  .app-shell {
-    padding-left: max(1.5rem, env(safe-area-inset-left));
-    padding-right: max(1.5rem, env(safe-area-inset-right));
-  }
-}
-
-@media (min-width: 1024px) {
-  .app-shell {
-    padding-left: max(2rem, env(safe-area-inset-left));
-    padding-right: max(2rem, env(safe-area-inset-right));
-  }
+  font-family: var(--font-display), "Fraunces", ui-serif, Georgia, serif;
 }
 
 /* Orchestrated page-load reveal: elements fade up in sequence via inline

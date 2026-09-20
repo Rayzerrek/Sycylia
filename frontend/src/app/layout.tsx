@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { Fraunces, Outfit } from "next/font/google";
-import Scrollbar from "@/components/scrollbar";
+import { SmoothScroll } from "@/components/smooth-scroll";
 import "./globals.css";
 
 const outfit = Outfit({
@@ -25,9 +25,8 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       lang="pl"
       className={`${outfit.variable} ${fraunces.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col text-stone-800">
-        {children}
-        <Scrollbar />
+      <body className="min-h-full flex flex-col text-terra-900 selection:bg-terra-200 selection:text-terra-900">
+        <SmoothScroll>{children}</SmoothScroll>
       </body>
     </html>
   );

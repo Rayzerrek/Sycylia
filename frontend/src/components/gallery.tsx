@@ -47,6 +47,33 @@ const PRELOAD_CACHE_LIMIT = 200;
 export interface GalleryProps {
   readonly className?: string;
 }
+function getDailyHighlights(files: FileEntry[], count: number = 5): FileEntry[] {
+  if (files.length <= count) return files;
+  
+  const today = new Date();
+  const seedStr = `${today.getFullYear()}-${today.getMonth()}-${today.getDate()}`;
+  
+  let seed = 0;
+  for (let i = 0; i < seedStr.length; i++) {
+    seed = (seed << 5) - seed + seedStr.charCodeAt(i);
+    seed |= 0; 
+  }
+  
+  const random = () => {
+    let t = (seed += 0x6d2b79f5);
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  
+  const shuffled = [...files];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  
+  return shuffled.slice(0, count);
+}
 
 export default function Gallery({ className }: GalleryProps) {
   const [files, setFiles] = useState<FileEntry[]>([]);
@@ -256,33 +283,35 @@ export default function Gallery({ className }: GalleryProps) {
         ) : (
           <>
             {files.length > 0 && (
-              <div className="mb-12">
-                <h2 className="mb-6 text-3xl font-display font-semibold tracking-tight text-terra-900 text-center sm:text-left">
-                  Nowości
+              <div className="mb-16">
+                <h2 className="mb-8 text-2xl font-display font-medium tracking-tight text-terra-900 flex items-center justify-between">
+                  <span>Wyróżnione dzisiaj</span>
                 </h2>
-                <div className="flex gap-4 overflow-x-auto pb-6 snap-x snap-mandatory px-2 sm:px-0 [scrollbar-width:thin] [scrollbar-color:theme(colors.orange.500)_transparent] [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar-track]:bg-amber-950/10 [&::-webkit-scrollbar-track]:rounded-full [&::-webkit-scrollbar-thumb]:bg-gradient-to-r [&::-webkit-scrollbar-thumb]:from-yellow-300 [&::-webkit-scrollbar-thumb]:via-orange-500 [&::-webkit-scrollbar-thumb]:to-rose-500 [&::-webkit-scrollbar-thumb]:rounded-full">
-                  {files.slice(0, 8).map((file, i) => (
-                    <div
-                      key={file.name}
-                      className="shrink-0 snap-center w-[240px] sm:w-[280px]"
-                    >
-                      <GalleryCard
-                        file={file}
-                        index={i}
-                        onOpen={handleOpen}
-                        onDownload={handleDownload}
-                        className="[contain-intrinsic-size:350px]"
-                        mediaClassName="w-full aspect-[4/5] object-cover transition-transform duration-500 ease-out group-hover:scale-[1.06]"
-                      />
-                    </div>
-                  ))}
+                <div className="flex gap-4 sm:gap-6 overflow-x-auto pb-8 snap-x snap-mandatory px-4 sm:px-0 -mx-4 sm:mx-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                  {getDailyHighlights(files).map((file) => {
+                    const i = files.findIndex((f) => f.name === file.name);
+                    return (
+                      <div
+                        key={file.name}
+                        className="shrink-0 snap-center w-[75vw] sm:w-[45vw] md:w-[35vw] lg:w-[400px]"
+                      >
+                        <GalleryCard
+                          file={file}
+                          index={i}
+                          onOpen={handleOpen}
+                          onDownload={handleDownload}
+                          className="aspect-[4/3] sm:aspect-[16/10]"
+                          mediaClassName="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-105"
+                        />
+                      </div>
+                    );
+                  })}
                 </div>
-                <div className="mt-8 mb-12 flex items-center justify-center">
-                  <div className="h-px w-full max-w-sm bg-gradient-to-r from-transparent via-terra-200 to-transparent"></div>
+                <div className="mt-8 mb-16 flex items-center justify-center">
+                  <div className="h-px w-full max-w-2xl bg-terra-900/5"></div>
                 </div>
               </div>
             )}
-
             <GalleryGrid
               files={files}
               onOpen={handleOpen}
@@ -341,7 +370,7 @@ function GalleryCard({
       <button
         type="button"
         aria-label={`Otwórz ${file.type === "video" ? "film" : "zdjęcie"}`}
-        className="overflow-hidden cursor-pointer rounded-2xl w-full h-full flex flex-col bg-terra-100 ring-1 ring-terra-900/10 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-terra-900/15 hover:ring-terra-400/60"
+        className="overflow-hidden cursor-pointer rounded-md w-full h-full flex flex-col bg-terra-100/50 ring-1 ring-terra-900/5 transition-all duration-500 hover:ring-terra-900/20"
         onPointerEnter={() => preloadPreview(file)}
         onFocus={() => preloadPreview(file)}
         onClick={() => onOpen(index)}
@@ -384,16 +413,15 @@ function GalleryCard({
       <button
         type="button"
         onClick={() => onDownload(file.name)}
-        className="absolute top-2 right-2 p-2 bg-black/45 text-white rounded-full shadow backdrop-blur transition-all duration-200 hover:bg-black/70 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100 z-10"
+        className="absolute top-3 right-3 p-2.5 bg-white/70 text-terra-900 rounded-full shadow-sm backdrop-blur-md transition-all duration-300 hover:bg-white hover:scale-105 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100 z-10"
         title="Pobierz"
         aria-label="Pobierz plik"
       >
-        <DownloadSimpleIcon size={16} weight="regular" />
+        <DownloadSimpleIcon size={18} weight="light" />
       </button>
     </div>
   );
 }
-
 function GalleryGrid({
   files,
   onOpen,
@@ -404,7 +432,7 @@ function GalleryGrid({
   readonly onDownload: (fileName: string) => void;
 }) {
   return (
-    <div className="columns-2 sm:columns-3 md:columns-4 gap-3 sm:gap-4">
+    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 sm:gap-6 lg:gap-8">
       {files.map((file, i) => (
         <GalleryCard
           key={file.name}
@@ -412,8 +440,8 @@ function GalleryGrid({
           index={i}
           onOpen={onOpen}
           onDownload={onDownload}
-          className="mb-3 sm:mb-4 break-inside-avoid [contain-intrinsic-size:200px]"
-          mediaClassName="w-full h-auto object-cover transition-transform duration-500 ease-out group-hover:scale-[1.06]"
+          className="aspect-[4/5] sm:aspect-square md:aspect-[3/4]"
+          mediaClassName="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-105"
         />
       ))}
     </div>
