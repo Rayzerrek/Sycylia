@@ -1,72 +1,99 @@
 @import "tailwindcss";
 
-@theme {
-  --font-sans: "Outfit", ui-sans-serif, system-ui, sans-serif;
-  --font-display: "Fraunces", ui-serif, Georgia, serif;
-
-  /* Sun-baked terracotta */
-  --color-terra-50: #fdf5ec;
-  --color-terra-100: #fae7d2;
-  --color-terra-200: #f4c9a1;
-  --color-terra-300: #eba26d;
-  --color-terra-400: #e07f3e;
-  --color-terra-500: #d3611f;
-  --color-terra-600: #b34d15;
-  --color-terra-700: #8c3c14;
-  --color-terra-800: #6f3014;
-  --color-terra-900: #572712;
-
-  /* Tyrrhenian azure */
-  --color-sea-50: #eff9ff;
-  --color-sea-100: #d9f0fd;
-  --color-sea-200: #b0e2fb;
-  --color-sea-300: #75cdf8;
-  --color-sea-400: #33b3f1;
-  --color-sea-500: #0f9ad8;
-  --color-sea-600: #0b7cb0;
-  --color-sea-700: #0e648d;
-
-  /* Citrus sun */
-  --color-sun-200: #fef0c7;
-  --color-sun-300: #fcd34d;
-  --color-sun-400: #fbbf24;
-  --color-sun-500: #f59e0b;
-  --color-sun-600: #d97706;
-}
-
 :root {
-  font-family: "Outfit", system-ui, sans-serif;
+  --color-paper: #faf9f6;
+  --color-paper-muted: #f2efe9;
+  --color-paper-card: #ffffff;
+  --color-ink: #10120f;
+  --color-ink-muted: #73726e;
+  --color-ink-faint: #a6a49f;
+  --color-rule: rgba(16, 18, 15, 0.08);
+  --color-rule-subtle: rgba(16, 18, 15, 0.04);
+  --color-rule-strong: rgba(16, 18, 15, 0.16);
+
+  font-family: var(--font-outfit), system-ui, sans-serif;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
+
+  /* Cinema Lightbox token overrides */
+  --yarl__color_backdrop: rgba(10, 10, 10, 0.96);
+  --yarl__color_button: #ededed;
+  --yarl__color_button_active: #ffffff;
+  --yarl__thumbnails_container_background_color: rgba(15, 15, 15, 0.85);
+  --yarl__thumbnails_thumbnail_border_color: rgba(255, 255, 255, 0.15);
+  --yarl__thumbnails_thumbnail_active_border_color: #ffffff;
+  --yarl__thumbnails_thumbnail_border_radius: 6px;
+  --yarl__thumbnails_thumbnail_width: 76px;
+  --yarl__thumbnails_thumbnail_height: 52px;
+}
+
+.dark,
+:root.dark {
+  --color-paper: #10120f;
+  --color-paper-muted: #171916;
+  --color-paper-card: #191b18;
+  --color-ink: #f5f5f4;
+  --color-ink-muted: #8c8b85;
+  --color-ink-faint: #5a5956;
+  --color-rule: rgba(245, 245, 244, 0.1);
+  --color-rule-subtle: rgba(245, 245, 244, 0.05);
+  --color-rule-strong: rgba(245, 245, 244, 0.2);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not(.light) {
+    --color-paper: #10120f;
+    --color-paper-muted: #171916;
+    --color-paper-card: #191b18;
+    --color-ink: #f5f5f4;
+    --color-ink-muted: #8c8b85;
+    --color-ink-faint: #5a5956;
+    --color-rule: rgba(245, 245, 244, 0.1);
+    --color-rule-subtle: rgba(245, 245, 244, 0.05);
+    --color-rule-strong: rgba(245, 245, 244, 0.2);
+  }
+}
+
+@theme {
+  --font-sans: var(--font-outfit), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-display), ui-serif, Georgia, serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+  /* Neutral Alasdair Monk & Superlogical semantic tokens */
+  --color-paper: var(--color-paper);
+  --color-paper-muted: var(--color-paper-muted);
+  --color-paper-card: var(--color-paper-card);
+  --color-ink: var(--color-ink);
+  --color-ink-muted: var(--color-ink-muted);
+  --color-ink-faint: var(--color-ink-faint);
+  --color-rule: var(--color-rule);
+  --color-rule-subtle: var(--color-rule-subtle);
+  --color-rule-strong: var(--color-rule-strong);
 }
 
 html {
   min-height: 100%;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-}
-
-html::-webkit-scrollbar {
-  display: none;
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-rule-strong) transparent;
 }
 
 body {
   margin: 0;
   min-height: 100%;
   -webkit-tap-highlight-color: transparent;
-  background-color: #F7F4EE;
-  background-image: 
-    radial-gradient(90% 90% at 85% 0%, rgba(235, 162, 109, 0.75) 0%, transparent 85%),
-    radial-gradient(90% 90% at 5% 95%, rgba(252, 211, 77, 0.65) 0%, transparent 85%),
-    radial-gradient(110% 110% at 50% 40%, rgba(244, 201, 161, 0.5) 0%, transparent 90%);
-  background-attachment: fixed;
+  background-color: var(--color-paper);
+  color: var(--color-ink);
+  transition:
+    background-color 0.2s ease,
+    color 0.2s ease;
 }
+
 ::selection {
-  background: #fed7aa;
-  color: #572712;
+  background: var(--color-ink);
+  color: var(--color-paper);
 }
 
 button,
@@ -85,8 +112,8 @@ button,
 }
 
 :focus-visible {
-  outline: 2px solid #d3611f;
-  outline-offset: 3px;
+  outline: 1.5px solid var(--color-ink);
+  outline-offset: 2px;
   border-radius: 4px;
 }
 
@@ -99,71 +126,14 @@ video {
   font-family: var(--font-display), "Fraunces", ui-serif, Georgia, serif;
 }
 
-/* Orchestrated page-load reveal: elements fade up in sequence via inline
-   animation-delay. Respects reduced motion. */
-@keyframes rise {
-  from {
-    opacity: 0;
-    transform: translateY(14px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+.border-rule {
+  border-color: var(--color-rule);
 }
 
-.reveal {
-  opacity: 0;
-  animation: rise 0.7s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+.border-rule-strong {
+  border-color: var(--color-rule-strong);
 }
-
-/* Paper sun: the ray ring turns slowly, each ray twinkles in sequence, and
-   the core gently breathes. transform-box keeps SVG rotation centered. */
-@keyframes spin-slow {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-.sun-rays {
-  transform-box: fill-box;
-  transform-origin: center;
-  animation: spin-slow 48s linear infinite;
-}
-
-@keyframes ray-twinkle {
-  0%,
-  100% {
-    opacity: 0.3;
-  }
-  50% {
-    opacity: 0.8;
-  }
-}
-
-.sun-ray {
-  animation: ray-twinkle 4.2s ease-in-out infinite;
-}
-
-@keyframes sun-breathe {
-  0%,
-  100% {
-    transform: scale(1);
-    opacity: 0.85;
-  }
-  50% {
-    transform: scale(1.07);
-    opacity: 1;
-  }
-}
-
-.sun-core {
-  transform-box: fill-box;
-  transform-origin: center;
-  animation: sun-breathe 6s ease-in-out infinite;
-}
-
-/* Shimmering gallery skeletons while the first page loads. */
+/* Skeleton shimmer adapting to theme variables */
 @keyframes shimmer {
   from {
     background-position: 200% 0;
@@ -174,20 +144,99 @@ video {
 }
 
 .skeleton-shimmer {
-  background: linear-gradient(100deg, #fae7d2 35%, #fffdf5 50%, #fae7d2 65%);
+  background: linear-gradient(
+    100deg,
+    var(--color-paper-muted) 35%,
+    var(--color-paper-card) 50%,
+    var(--color-paper-muted) 65%
+  );
   background-size: 200% 100%;
   animation: shimmer 1.8s ease-in-out infinite;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .reveal {
-    opacity: 1;
-    animation: none;
-  }
-  .sun-rays,
-  .sun-ray,
-  .sun-core,
-  .skeleton-shimmer {
-    animation: none;
-  }
+/* Lightbox styling */
+.yarl__portal div.yarl__container {
+  backdrop-filter: blur(24px) saturate(160%);
+  background-color: rgba(10, 10, 10, 0.96);
+}
+
+.yarl__portal div.yarl__toolbar {
+  padding: 16px 20px;
+  background: linear-gradient(
+    to bottom,
+    rgba(10, 10, 10, 0.8) 0%,
+    transparent 100%
+  );
+}
+
+.yarl__portal button.yarl__button {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 9999px;
+  padding: 8px;
+  width: 38px;
+  height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #ededed;
+  backdrop-filter: blur(8px);
+  transition: all 0.15s ease;
+  margin: 0 3px;
+}
+
+.yarl__portal button.yarl__button:hover {
+  background: rgba(255, 255, 255, 0.18);
+  border-color: rgba(255, 255, 255, 0.25);
+  color: #ffffff;
+  transform: translateY(-1px);
+}
+
+.yarl__portal button.yarl__navigation_prev,
+.yarl__portal button.yarl__navigation_next {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 9999px;
+  width: 44px;
+  height: 44px;
+  margin: 0 16px;
+  backdrop-filter: blur(12px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  transition: all 0.2s ease;
+}
+
+.yarl__portal button.yarl__navigation_prev:hover,
+.yarl__portal button.yarl__navigation_next:hover {
+  background: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.3);
+  transform: scale(1.05);
+}
+
+.yarl__portal div.yarl__thumbnails_container {
+  padding: 14px 16px 20px;
+  background: linear-gradient(
+    to top,
+    rgba(10, 10, 10, 0.95) 0%,
+    rgba(10, 10, 10, 0.4) 80%,
+    transparent 100%
+  );
+  backdrop-filter: blur(10px);
+}
+
+.yarl__portal button.yarl__thumbnails_thumbnail {
+  border-radius: 6px;
+  overflow: hidden;
+  transition: all 0.2s ease;
+}
+
+.yarl__portal button.yarl__thumbnails_thumbnail:hover {
+  opacity: 1;
+  transform: translateY(-1px);
+}
+
+.yarl__portal
+  button.yarl__thumbnails_thumbnail.yarl__thumbnails_thumbnail_active {
+  box-shadow:
+    0 0 0 1.5px #ffffff,
+    0 4px 16px rgba(255, 255, 255, 0.25);
 }

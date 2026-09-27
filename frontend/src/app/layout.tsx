@@ -15,8 +15,8 @@ const fraunces = Fraunces({
 });
 
 export const metadata: Metadata = {
-  title: "Galeria z wakacji",
-  description: "Galeria zdjęć i filmów z wakacji. Dodaj swoje wspomnienia!",
+  title: "Galeria zdjęć",
+  description: "Minimalistyczna galeria zdjęć i filmów.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
@@ -24,8 +24,16 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     <html
       lang="pl"
       className={`${outfit.variable} ${fraunces.variable} antialiased`}
+      suppressHydrationWarning
     >
-      <body className="min-h-screen flex flex-col text-terra-900 selection:bg-terra-200 selection:text-terra-900">
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var t=localStorage.getItem('gallery_theme_v1');var d=window.matchMedia('(prefers-color-scheme: dark)').matches;if(t==='dark'||(!t&&d)){document.documentElement.classList.add('dark');}else if(t==='light'){document.documentElement.classList.add('light');}}catch(e){}})()`,
+          }}
+        />
+      </head>
+      <body className="min-h-screen flex flex-col bg-paper text-ink selection:bg-ink selection:text-paper">
         <SmoothScroll>{children}</SmoothScroll>
       </body>
     </html>

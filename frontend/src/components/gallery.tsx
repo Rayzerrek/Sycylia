@@ -1,10 +1,26 @@
 "use client";
 
-import { DownloadSimpleIcon, PlayIcon } from "@phosphor-icons/react";
+import {
+  DownloadSimpleIcon,
+  PlayIcon,
+  HeartIcon,
+  ArrowCounterClockwiseIcon,
+} from "@phosphor-icons/react";
 import dynamic from "next/dynamic";
-import { useState, useRef, useEffect, useCallback, useMemo, Suspense } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  Suspense,
+} from "react";
 
 import { downloadFile, fetchAllFiles, fetchFiles } from "@/lib/files";
+import { useFavorites } from "@/lib/favorites";
+import { GalleryHeader } from "@/components/gallery-header";
+import { ControlDock } from "@/components/control-dock";
+import type { ViewMode, SortMode } from "@/components/control-dock";
 import Upload from "@/components/upload";
 
 import type { FileEntry, Pagination } from "@/lib/files";
@@ -16,14 +32,14 @@ const GalleryLightbox = dynamic(() => import("@/components/gallery-lightbox"), {
 
 const PAGE_SIZE = 24;
 const SKELETON_KEYS = [
-  "gallery-skeleton-1",
-  "gallery-skeleton-2",
-  "gallery-skeleton-3",
-  "gallery-skeleton-4",
-  "gallery-skeleton-5",
-  "gallery-skeleton-6",
-  "gallery-skeleton-7",
-  "gallery-skeleton-8",
+  "sk-1",
+  "sk-2",
+  "sk-3",
+  "sk-4",
+  "sk-5",
+  "sk-6",
+  "sk-7",
+  "sk-8",
 ];
 
 const DEFAULT_PAGINATION: Pagination = {
@@ -43,25 +59,22 @@ export interface GalleryProps {
 
 export default function Gallery({ className }: GalleryProps) {
   const [files, setFiles] = useState<FileEntry[]>([]);
-  // Full metadata list loaded once for the lightbox so the viewer can swipe
-  // through every photo; the grid keeps its own paginated `files`.
   const [allFiles, setAllFiles] = useState<FileEntry[] | null>(null);
   const [index, setIndex] = useState(-1);
   const [everOpened, setEverOpened] = useState(false);
+  const [autoPlaySlideshow, setAutoPlaySlideshow] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState("");
   const [pagination, setPagination] = useState<Pagination>(DEFAULT_PAGINATION);
-  const randomHighlights = useMemo(() => {
-    const count = 5;
-    if (files.length <= count) return files;
-    const shuffled = [...files].sort(() => Math.random() - 0.5);
-    return shuffled.slice(0, count);
-  }, [files]);
 
-  // Mirrors of state used to remap the lightbox index when the paginated list
-  // is swapped for the full list mid-view. Updated during render, like the
-  // previous `slidesRef` pattern, so the async fetch reads the latest values.
+  // Minimalist view & sort controls
+  const [viewMode, setViewMode] = useState<ViewMode>("editorial");
+  const [sortMode, setSortMode] = useState<SortMode>("newest");
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const { isFav, toggle: toggleFav } = useFavorites();
+
   const filesRef = useRef(files);
   filesRef.current = files;
   const allFilesRef = useRef(allFiles);
@@ -102,14 +115,11 @@ export default function Gallery({ className }: GalleryProps) {
     return () => controller.abort();
   }, [fetchPage]);
 
-  // Abort the all-files fetch if Gallery unmounts mid-load.
   useEffect(() => () => allFilesControllerRef.current?.abort(), []);
 
   const loadAllFiles = useCallback(async (signal: AbortSignal) => {
     try {
       const all = await fetchAllFiles(signal);
-      // Remap the currently-shown slide to its position in the full list so the
-      // viewer does not jump when the paginated list is swapped for the full one.
       const currentList = allFilesRef.current ?? filesRef.current;
       const currentName = currentList[indexRef.current]?.name;
       let nextIndex = indexRef.current;
@@ -121,7 +131,6 @@ export default function Gallery({ className }: GalleryProps) {
       if (indexRef.current >= 0) setIndex(nextIndex);
     } catch (err) {
       if (err instanceof Error && err.name === "AbortError") return;
-      // The paginated list keeps the lightbox usable; just log the failure.
       console.error("Fetch all files error:", err);
     }
   }, []);
@@ -140,14 +149,13 @@ export default function Gallery({ className }: GalleryProps) {
       prev.some((entry) => entry.name === file.name) ? prev : [file, ...prev],
     );
     setPagination((prev) => ({ ...prev, total: prev.total + 1 }));
-    // A new upload invalidates the cached full list; reload it on next open.
     allFilesControllerRef.current?.abort();
     setAllFiles(null);
     fetchedAllRef.current = false;
   }, []);
 
   const handleOpen = useCallback(
-    (i: number) => {
+    (i: number, playSlideshow = false) => {
       const targetName = filesRef.current[i]?.name;
       let lightboxIdx = i;
       if (allFilesRef.current && targetName !== undefined) {
@@ -157,15 +165,12 @@ export default function Gallery({ className }: GalleryProps) {
         if (found >= 0) lightboxIdx = found;
       }
 
-      // Push the history entry synchronously inside the click gesture. WebKit
-      // (iOS Safari, Chrome on iOS) skips pushState entries created outside of
-      // user interaction when navigating back, so pushing it from an effect
-      // makes the back button leave the page instead of closing the lightbox.
       if (!lightboxOpenRef.current) {
         lightboxOpenRef.current = true;
         window.history.pushState({ lightbox: true }, "");
       }
 
+      setAutoPlaySlideshow(playSlideshow);
       setIndex(lightboxIdx);
       setEverOpened(true);
 
@@ -179,32 +184,26 @@ export default function Gallery({ className }: GalleryProps) {
     [loadAllFiles],
   );
 
-  // Manual close (X / backdrop / Escape): consume the entry pushed on open so
-  // a later back press doesn't pop a stale state.
   const handleClose = useCallback(() => {
     if (lightboxOpenRef.current) {
       lightboxOpenRef.current = false;
       window.history.back();
     }
     setIndex(-1);
+    setAutoPlaySlideshow(false);
   }, []);
 
-  // Browser back button/gesture while the lightbox is open: close it instead
-  // of leaving the page.
   useEffect(() => {
     if (index < 0) return;
     const handlePopState = () => {
       lightboxOpenRef.current = false;
       setIndex(-1);
+      setAutoPlaySlideshow(false);
     };
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
   }, [index]);
 
-  // The lightbox browses the full list (loaded once, on first open) so the
-  // viewer can swipe past the currently paginated grid page. Until that load
-  // resolves it falls back to the paginated list, which still covers the page
-  // the user clicked into.
   const lightboxFiles = allFiles ?? files;
   const slides: Slide[] = useMemo(
     () =>
@@ -224,81 +223,150 @@ export default function Gallery({ className }: GalleryProps) {
     [lightboxFiles],
   );
 
+  // Search and sort the displayed gallery items
+  const displayedFiles = useMemo(() => {
+    let result = [...files];
+
+    // Filter by search query
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      result = result.filter((f) => {
+        const nameMatch = f.name.toLowerCase().includes(q);
+        const dateMatch = f.createdAt?.toLowerCase().includes(q);
+        return nameMatch || dateMatch;
+      });
+    }
+
+    // Sort
+    if (sortMode === "oldest") {
+      result.sort((a, b) => {
+        const da = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const db = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return da - db;
+      });
+    } else if (sortMode === "newest") {
+      result.sort((a, b) => {
+        const da = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const db = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return db - da;
+      });
+    } else if (sortMode === "random") {
+      result.sort((a, b) => {
+        const ha = a.name
+          .split("")
+          .reduce((acc, c) => acc + c.charCodeAt(0), 0);
+        const hb = b.name
+          .split("")
+          .reduce((acc, c) => acc + c.charCodeAt(0), 0);
+        return (ha % 17) - (hb % 17);
+      });
+    }
+
+    return result;
+  }, [files, searchQuery, sortMode]);
+
   return (
     <div className={className}>
-      <div className="mx-auto w-full sm:w-1/2">
+      {/* Minimalist Gallery Header */}
+      <GalleryHeader totalCount={pagination.total || files.length} />
+
+      {/* Sleek low-profile upload bar */}
+      <div className="mb-6 w-full">
         <Upload onUploaded={handleUploaded} />
       </div>
 
-      {error && <p className="mt-4 text-center text-red-700">{error}</p>}
+      {/* Minimalist Controls */}
+      <ControlDock
+        viewMode={viewMode}
+        onViewModeChange={setViewMode}
+        sortMode={sortMode}
+        onSortModeChange={setSortMode}
+        searchQuery={searchQuery}
+        onSearchQueryChange={setSearchQuery}
+        onStartSlideshow={() => {
+          if (displayedFiles.length > 0) {
+            const first = displayedFiles[0];
+            const originalIndex = files.findIndex((f) => f.name === first.name);
+            handleOpen(originalIndex >= 0 ? originalIndex : 0, true);
+          }
+        }}
+      />
 
-      <section aria-label="Wspomnienia">
+      {error && (
+        <div className="mb-6 p-4 rounded-xl border border-red-200 bg-red-50 text-red-700 text-sm font-mono text-center">
+          {error}
+        </div>
+      )}
 
+      <section aria-label="Galeria zdjęć">
         {loading ? (
           <div className="columns-2 sm:columns-3 md:columns-4 gap-3 sm:gap-4">
             {SKELETON_KEYS.map((key, i) => (
               <div
                 key={key}
-                className={`skeleton-shimmer rounded-2xl mb-3 sm:mb-4 break-inside-avoid ${i % 3 === 0 ? 'aspect-[3/4]' : i % 2 === 0 ? 'aspect-[4/3]' : 'aspect-square'}`}
+                className={`skeleton-shimmer rounded-xl mb-3 sm:mb-4 break-inside-avoid ${
+                  i % 3 === 0
+                    ? "aspect-[3/4]"
+                    : i % 2 === 0
+                      ? "aspect-[4/3]"
+                      : "aspect-square"
+                }`}
               />
             ))}
           </div>
         ) : files.length === 0 ? (
-          <div className="rounded-3xl border border-dashed border-terra-300 bg-white/50 px-6 py-12 text-center backdrop-blur">
-            <p className="font-display text-xl italic text-terra-700">
+          <div className="rounded-2xl border border-dashed border-rule bg-paper-card p-12 text-center shadow-xs">
+            <p className="font-serif italic text-xl text-ink">
               Jeszcze tu pusto…
             </p>
-            <p className="mt-2 text-sm text-stone-500">
-              Dodaj pierwsze zdjęcie powyżej i zacznij album.
+            <p className="mt-2 text-xs font-mono text-ink-muted">
+              Dodaj pierwsze zdjęcia i filmy powyżej.
             </p>
+          </div>
+        ) : displayedFiles.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-rule bg-paper-card p-12 text-center shadow-xs">
+            <p className="font-serif italic text-lg text-ink">
+              Brak wyników wyszukiwania.
+            </p>
+            <button
+              type="button"
+              onClick={() => setSearchQuery("")}
+              className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-ink text-paper text-xs font-mono tracking-wider cursor-pointer shadow-xs hover:opacity-90"
+            >
+              <ArrowCounterClockwiseIcon size={14} />
+              <span>Wyczyść wyszukiwanie</span>
+            </button>
           </div>
         ) : (
           <>
-            {files.length > 0 && (
-              <div className="mb-16">
-                <h2 className="mb-8 text-2xl font-display font-medium tracking-tight text-terra-900 flex items-center justify-between">
-                  <span>Wyróżnione z galerii</span>
-                </h2>
-                <div className="flex gap-4 sm:gap-6 overflow-x-auto pb-8 snap-x snap-mandatory px-4 sm:px-0 -mx-4 sm:mx-0 [scrollbar-width:thin] [scrollbar-color:theme(colors.terra.300)_transparent] [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-terra-300 [&::-webkit-scrollbar-thumb]:rounded-full">
-                  {randomHighlights.map((file) => {
-                    const i = files.findIndex((f) => f.name === file.name);
-                    return (
-                      <div
-                        key={file.name}
-                        className="shrink-0 snap-center w-[75vw] sm:w-[45vw] md:w-[35vw] lg:w-[400px]"
-                      >
-                        <GalleryCard
-                          file={file}
-                          index={i}
-                          onOpen={handleOpen}
-                          onDownload={handleDownload}
-                          className="aspect-[4/3] sm:aspect-[16/10]"
-                          mediaClassName="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-105"
-                        />
-                      </div>
-                    );
-                  })}
-                </div>
-                <div className="mt-8 mb-16 flex items-center justify-center">
-                  <div className="h-px w-full max-w-2xl bg-terra-900/5"></div>
-                </div>
-              </div>
-            )}
+            {/* Main Gallery Grid */}
             <GalleryGrid
-              files={files}
+              files={displayedFiles}
+              originalFiles={files}
               onOpen={handleOpen}
               onDownload={handleDownload}
+              isFav={isFav}
+              onToggleFavorite={toggleFav}
+              viewMode={viewMode}
             />
 
-            {pagination.hasNextPage && (
-              <div className="flex justify-center pt-8">
+            {/* Pagination Button */}
+            {pagination.hasNextPage && !searchQuery && (
+              <div className="flex justify-center pt-10 pb-6">
                 <button
                   type="button"
                   onClick={loadNextPage}
                   disabled={loadingMore}
-                  className="rounded-full bg-gradient-to-r from-amber-500 to-terra-500 px-8 py-3 font-medium text-white shadow-lg shadow-terra-500/30 transition-all duration-200 hover:-translate-y-px hover:from-amber-500 hover:to-terra-600 hover:shadow-xl hover:shadow-terra-500/30 active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:translate-y-0"
+                  className="flex items-center gap-2 rounded-full border border-rule bg-paper-card hover:bg-paper text-ink px-7 py-3 font-mono text-xs tracking-wider uppercase transition-all duration-150 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-60 cursor-pointer shadow-xs"
                 >
-                  {loadingMore ? "Ładowanie..." : "Pokaż więcej"}
+                  {loadingMore ? (
+                    <>
+                      <span className="size-3.5 border-2 border-ink-muted border-t-ink rounded-full animate-spin" />
+                      <span>Ładowanie...</span>
+                    </>
+                  ) : (
+                    <span>Pokaż więcej</span>
+                  )}
                 </button>
               </div>
             )}
@@ -315,9 +383,93 @@ export default function Gallery({ className }: GalleryProps) {
             slides={slides}
             onClose={handleClose}
             onIndexChange={setIndex}
+            autoPlaySlideshow={autoPlaySlideshow}
           />
         </Suspense>
       )}
+    </div>
+  );
+}
+
+function GalleryGrid({
+  files,
+  originalFiles,
+  onOpen,
+  onDownload,
+  isFav,
+  onToggleFavorite,
+  viewMode,
+}: {
+  readonly files: FileEntry[];
+  readonly originalFiles: FileEntry[];
+  readonly onOpen: (i: number) => void;
+  readonly onDownload: (fileName: string) => void;
+  readonly isFav: (fileName: string) => boolean;
+  readonly onToggleFavorite: (fileName: string) => boolean;
+  readonly viewMode: ViewMode;
+}) {
+  if (viewMode === "showcase") {
+    return (
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
+        {files.map((file, i) => {
+          const origIdx = originalFiles.findIndex((f) => f.name === file.name);
+          return (
+            <GalleryCard
+              key={file.name}
+              file={file}
+              index={origIdx >= 0 ? origIdx : i}
+              onOpen={onOpen}
+              onDownload={onDownload}
+              isFavorite={isFav(file.name)}
+              onToggleFavorite={onToggleFavorite}
+              aspectRatioClass="aspect-[16/10]"
+            />
+          );
+        })}
+      </div>
+    );
+  }
+
+  if (viewMode === "grid") {
+    return (
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5 sm:gap-3 lg:gap-4">
+        {files.map((file, i) => {
+          const origIdx = originalFiles.findIndex((f) => f.name === file.name);
+          return (
+            <GalleryCard
+              key={file.name}
+              file={file}
+              index={origIdx >= 0 ? origIdx : i}
+              onOpen={onOpen}
+              onDownload={onDownload}
+              isFavorite={isFav(file.name)}
+              onToggleFavorite={onToggleFavorite}
+              aspectRatioClass="aspect-square"
+            />
+          );
+        })}
+      </div>
+    );
+  }
+
+  // "editorial" mode: True CSS column masonry with uncropped natural photo ratios
+  return (
+    <div className="columns-2 sm:columns-3 md:columns-4 gap-2.5 sm:gap-3 lg:gap-4 space-y-2.5 sm:space-y-3 lg:space-y-4">
+      {files.map((file, i) => {
+        const origIdx = originalFiles.findIndex((f) => f.name === file.name);
+        return (
+          <div key={file.name} className="break-inside-avoid">
+            <GalleryCard
+              file={file}
+              index={origIdx >= 0 ? origIdx : i}
+              onOpen={onOpen}
+              onDownload={onDownload}
+              isFavorite={isFav(file.name)}
+              onToggleFavorite={onToggleFavorite}
+            />
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -327,52 +479,57 @@ function GalleryCard({
   index,
   onOpen,
   onDownload,
-  className = "",
-  mediaClassName = "",
+  isFavorite,
+  onToggleFavorite,
+  aspectRatioClass = "",
 }: {
   readonly file: FileEntry;
   readonly index: number;
   readonly onOpen: (i: number) => void;
   readonly onDownload: (fileName: string) => void;
-  readonly className?: string;
-  readonly mediaClassName?: string;
+  readonly isFavorite: boolean;
+  readonly onToggleFavorite: (fileName: string) => boolean;
+  readonly aspectRatioClass?: string;
 }) {
   return (
-    <div className={`relative group ${className}`}>
+    <div
+      className={`relative group overflow-hidden rounded-xl border border-rule bg-paper-card shadow-2xs transition-all duration-300 hover:shadow-md hover:border-rule-strong ${aspectRatioClass}`}
+    >
       <button
         type="button"
         aria-label={`Otwórz ${file.type === "video" ? "film" : "zdjęcie"}`}
-        className="overflow-hidden cursor-pointer rounded-md w-full h-full flex flex-col bg-terra-100/50 ring-1 ring-terra-900/5 transition-all duration-500 hover:ring-terra-900/20"
+        className="cursor-pointer w-full h-full flex flex-col relative overflow-hidden"
         onPointerEnter={() => preloadPreview(file)}
         onFocus={() => preloadPreview(file)}
         onClick={() => onOpen(index)}
       >
         {file.type === "video" ? (
-          <div className="relative w-full h-full overflow-hidden">
+          <div className="relative w-full h-full overflow-hidden bg-neutral-900">
             <VideoThumb
               src={file.previewUrl ?? file.url}
               fallbackSrc={file.url}
-              className={mediaClassName}
+              className="w-full h-full object-cover transition-transform duration-500 ease-out group-hover:scale-[1.02]"
             />
-            <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-t from-terra-950/50 via-transparent to-transparent">
-              <span className="flex size-14 items-center justify-center rounded-full bg-white/85 shadow-lg backdrop-blur transition-transform duration-300 group-hover:scale-110">
+            {/* Pure clean play icon with no darkening scrim */}
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <span className="flex size-10 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur-md transition-transform duration-300 group-hover:scale-110">
                 <PlayIcon
-                  size={26}
+                  size={18}
                   weight="fill"
-                  className="ml-0.5 text-terra-600"
+                  className="ml-0.5 text-white"
                 />
               </span>
             </div>
           </div>
         ) : (
-          // biome-ignore lint/performance/noImgElement: thumbnails come from opaque backend URLs
+          // biome-ignore lint/performance/noImgElement: dynamic thumbnails from cloud backend
           <img
             src={file.thumbUrl ?? file.url}
             alt=""
-            className={mediaClassName}
-            loading={index < 4 ? "eager" : "lazy"}
+            className="w-full h-auto object-cover transition-transform duration-500 ease-out group-hover:scale-[1.02]"
+            loading={index < 8 ? "eager" : "lazy"}
             decoding="async"
-            fetchPriority={index < 4 ? "high" : "low"}
+            fetchPriority={index < 8 ? "high" : "low"}
             onError={(e) => {
               const el = e.currentTarget;
               if (el.dataset.fallback === "1" || !file.url) return;
@@ -382,40 +539,44 @@ function GalleryCard({
           />
         )}
       </button>
+
+      {/* Top Left: Subtle Favorite Heart Button */}
       <button
         type="button"
-        onClick={() => onDownload(file.name)}
-        className="absolute top-3 right-3 p-2.5 bg-white/70 text-terra-900 rounded-full shadow-sm backdrop-blur-md transition-all duration-300 hover:bg-white hover:scale-105 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100 z-10"
-        title="Pobierz"
-        aria-label="Pobierz plik"
+        onClick={(e) => {
+          e.stopPropagation();
+          onToggleFavorite(file.name);
+        }}
+        className={`absolute top-2 left-2 size-7 rounded-full backdrop-blur-md flex items-center justify-center transition-all duration-200 z-10 cursor-pointer ${
+          isFavorite
+            ? "bg-rose-500 text-white opacity-100 scale-100 shadow-sm"
+            : "bg-black/30 hover:bg-black/60 text-white opacity-0 group-hover:opacity-100 hover:scale-110"
+        }`}
+        title={isFavorite ? "Usuń z ulubionych" : "Dodaj do ulubionych"}
+        aria-label="Polub kadr"
       >
-        <DownloadSimpleIcon size={18} weight="light" />
-      </button>
-    </div>
-  );
-}
-function GalleryGrid({
-  files,
-  onOpen,
-  onDownload,
-}: {
-  readonly files: FileEntry[];
-  readonly onOpen: (i: number) => void;
-  readonly onDownload: (fileName: string) => void;
-}) {
-  return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 sm:gap-6 lg:gap-8">
-      {files.map((file, i) => (
-        <GalleryCard
-          key={file.name}
-          file={file}
-          index={i}
-          onOpen={onOpen}
-          onDownload={onDownload}
-          className="aspect-[4/5] sm:aspect-square md:aspect-[3/4]"
-          mediaClassName="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-105"
+        <HeartIcon
+          size={13}
+          weight={isFavorite ? "fill" : "regular"}
+          className={isFavorite ? "text-white" : ""}
         />
-      ))}
+      </button>
+
+      {/* Top Right: Subtle Download Button */}
+      <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-10">
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onDownload(file.name);
+          }}
+          className="size-7 bg-black/30 hover:bg-black/60 text-white rounded-full backdrop-blur-md flex items-center justify-center transition-all duration-200 hover:scale-110 cursor-pointer"
+          title="Pobierz"
+          aria-label="Pobierz plik"
+        >
+          <DownloadSimpleIcon size={13} />
+        </button>
+      </div>
     </div>
   );
 }
@@ -447,10 +608,6 @@ function VideoThumb({
 }) {
   const ref = useRef<HTMLVideoElement>(null);
 
-  // Load metadata only once the element approaches the viewport. `preload` is
-  // driven by visibility instead of list index, so prepending a new upload no
-  // longer flips already-rendered videos back to `preload="none"` and dropping
-  // their displayed frame.
   useEffect(() => {
     const el = ref.current;
     if (el === null) return;
@@ -471,8 +628,6 @@ function VideoThumb({
     return () => observer.disconnect();
   }, []);
 
-  // `#t=0.5` makes the browser seek to 0.5s and show that frame as the poster
-  // once metadata is available, instead of a black rectangle.
   return (
     <video
       ref={ref}
@@ -494,12 +649,6 @@ function VideoThumb({
 function readVideoMimeType(file: FileEntry): string {
   const mime = typeof file.mimeType === "string" ? file.mimeType : "";
   if (mime.startsWith("video/")) {
-    // iPhone `.mov` (QuickTime container) frequently holds H.264 that every
-    // browser can play, but `canPlayType("video/quicktime")` returns "" in
-    // Chrome/Firefox, so the lightbox video plugin refuses to load the source.
-    // Remap to `video/mp4` (same ISO-BMFF container) so playback is actually
-    // attempted. HEVC-in-mov stays undecodable regardless of label; that case
-    // is handled by upload-side conversion in `lib/convert.ts`.
     if (mime === "video/quicktime") return "video/mp4";
     return mime;
   }
