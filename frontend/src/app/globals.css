@@ -299,27 +299,6 @@ video {
 .gallery-search input::placeholder {
   color: var(--color-ink-muted);
 }
-.gallery-tools {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-}
-.gallery-tools select {
-  max-width: 8rem;
-  padding: 0.5rem 0.25rem;
-  color: var(--color-ink-muted);
-  background: var(--color-paper);
-  font-size: 0.8125rem;
-  cursor: pointer;
-}
-.view-switch {
-  display: flex;
-  gap: 0.15rem;
-  padding: 0.2rem;
-  border-radius: 0.5rem;
-  background: var(--color-paper-muted);
-}
-.view-switch button,
 .gallery-search button {
   display: grid;
   place-items: center;
@@ -328,16 +307,6 @@ video {
   border-radius: 0.35rem;
   color: var(--color-ink-muted);
   cursor: pointer;
-  transition:
-    color 180ms ease,
-    background-color 180ms ease;
-}
-.view-switch button[aria-pressed="true"] {
-  background: var(--color-paper-card);
-  color: var(--color-ink);
-}
-.view-switch button:hover {
-  color: var(--color-ink);
 }
 .slideshow-button {
   display: flex;
@@ -420,15 +389,6 @@ video {
   }
   .gallery-search {
     width: 100%;
-  }
-  .gallery-tools {
-    justify-content: space-between;
-    width: 100%;
-    gap: 0.65rem;
-  }
-  .view-switch button {
-    min-width: 44px;
-    min-height: 44px;
   }
 }
 @media (forced-colors: active) {

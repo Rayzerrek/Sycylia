@@ -21,7 +21,6 @@ import { downloadFile, fetchAllFiles, fetchFiles } from "@/lib/files";
 import { useFavorites } from "@/lib/favorites";
 import { GalleryHeader } from "@/components/gallery-header";
 import { ControlDock } from "@/components/control-dock";
-import type { ViewMode, SortMode } from "@/components/control-dock";
 import Upload from "@/components/upload";
 
 import type { FileEntry, Pagination } from "@/lib/files";
@@ -64,9 +63,6 @@ export default function Gallery({ className }: GalleryProps) {
   const [error, setError] = useState("");
   const [pagination, setPagination] = useState<Pagination>(DEFAULT_PAGINATION);
 
-  // Minimalist view & sort controls
-  const [viewMode, setViewMode] = useState<ViewMode>("editorial");
-  const [sortMode, setSortMode] = useState<SortMode>("newest");
   const [searchQuery, setSearchQuery] = useState("");
   const deferredSearchQuery = useDeferredValue(searchQuery);
 
@@ -219,7 +215,7 @@ export default function Gallery({ className }: GalleryProps) {
     [lightboxFiles],
   );
 
-  // Search and sort the displayed gallery items
+  // Search the displayed gallery items
   const displayedFiles = useMemo(() => {
     let result = [...files];
 
@@ -233,23 +229,8 @@ export default function Gallery({ className }: GalleryProps) {
       });
     }
 
-    // Sort
-    if (sortMode === "oldest") {
-      result.sort((a, b) => {
-        const da = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-        const db = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-        return da - db;
-      });
-    } else if (sortMode === "newest") {
-      result.sort((a, b) => {
-        const da = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-        const db = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-        return db - da;
-      });
-    }
-
     return result;
-  }, [files, deferredSearchQuery, sortMode]);
+  }, [files, deferredSearchQuery]);
 
   return (
     <div className={className}>
@@ -263,10 +244,6 @@ export default function Gallery({ className }: GalleryProps) {
 
       {/* Minimalist Controls */}
       <ControlDock
-        viewMode={viewMode}
-        onViewModeChange={setViewMode}
-        sortMode={sortMode}
-        onSortModeChange={setSortMode}
         searchQuery={searchQuery}
         onSearchQueryChange={setSearchQuery}
         slideshowDisabled={displayedFiles.length === 0}
@@ -334,7 +311,6 @@ export default function Gallery({ className }: GalleryProps) {
               onDownload={handleDownload}
               isFav={isFav}
               onToggleFavorite={toggleFav}
-              viewMode={viewMode}
             />
 
             {/* Pagination Button */}
@@ -381,7 +357,6 @@ function GalleryGrid({
   onDownload,
   isFav,
   onToggleFavorite,
-  viewMode,
 }: {
   readonly files: FileEntry[];
   readonly originalFiles: FileEntry[];
@@ -389,37 +364,12 @@ function GalleryGrid({
   readonly onDownload: (fileName: string) => void;
   readonly isFav: (fileName: string) => boolean;
   readonly onToggleFavorite: (fileName: string) => boolean;
-  readonly viewMode: ViewMode;
 }) {
   const originalIndices = useMemo(
     () => new Map(originalFiles.map((file, index) => [file.name, index])),
     [originalFiles],
   );
 
-  if (viewMode === "grid") {
-    return (
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5 sm:gap-3 lg:gap-4">
-        {files.map((file, i) => {
-          const origIdx = originalIndices.get(file.name) ?? i;
-          return (
-            <GalleryCard
-              key={file.name}
-              file={file}
-              index={origIdx}
-              eager={i < 4}
-              onOpen={onOpen}
-              onDownload={onDownload}
-              isFavorite={isFav(file.name)}
-              onToggleFavorite={onToggleFavorite}
-              aspectRatioClass="aspect-square"
-            />
-          );
-        })}
-      </div>
-    );
-  }
-
-  // "editorial" mode: True CSS column masonry with uncropped natural photo ratios
   return (
     <div className="columns-2 sm:columns-3 md:columns-4 gap-2.5 sm:gap-3 lg:gap-4 space-y-2.5 sm:space-y-3 lg:space-y-4">
       {files.map((file, i) => {
@@ -449,7 +399,6 @@ const GalleryCard = memo(function GalleryCard({
   onDownload,
   isFavorite,
   onToggleFavorite,
-  aspectRatioClass = "",
   eager,
 }: {
   readonly file: FileEntry;
@@ -458,13 +407,10 @@ const GalleryCard = memo(function GalleryCard({
   readonly onDownload: (fileName: string) => void;
   readonly isFavorite: boolean;
   readonly onToggleFavorite: (fileName: string) => boolean;
-  readonly aspectRatioClass?: string;
   readonly eager: boolean;
 }) {
   return (
-    <div
-      className={`gallery-card relative group overflow-hidden rounded-lg bg-paper-muted ${aspectRatioClass}`}
-    >
+    <div className="gallery-card relative group overflow-hidden rounded-lg bg-paper-muted">
       <button
         type="button"
         aria-label={`Otwórz ${file.type === "video" ? "film" : "zdjęcie"}`}
@@ -507,11 +453,7 @@ const GalleryCard = memo(function GalleryCard({
           <img
             src={file.thumbUrl ?? file.url}
             alt={file.name}
-            className={
-              aspectRatioClass
-                ? "w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.025]"
-                : "w-full h-auto object-cover transition-transform duration-300 group-hover:scale-[1.025]"
-            }
+            className="w-full h-auto object-cover transition-transform duration-300 group-hover:scale-[1.025]"
             loading={eager ? "eager" : "lazy"}
             decoding="async"
             fetchPriority={eager ? "auto" : "low"}
