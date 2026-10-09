@@ -93,7 +93,6 @@ function buildFileInfo(
       mimeType,
       type: "video",
       createdAt,
-      searchText: object.searchText,
     };
   }
 
@@ -111,6 +110,5 @@ function buildFileInfo(
     mimeType,
     type: "image",
     createdAt,
-    searchText: object.searchText,
   };
 }

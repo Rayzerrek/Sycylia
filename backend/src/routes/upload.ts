@@ -11,7 +11,6 @@ import {
   isAnimatedImage,
   isTransformableImage,
 } from "../media/media-types.ts";
-import { indexPhoto, needsPhotoIndex } from "../search/photo-index.ts";
 
 import type { Config } from "../env.ts";
 import type {
@@ -88,18 +87,7 @@ export function uploadRoute(config: Config): Hono<{ Bindings: Env }> {
       mimeType,
       type,
       createdAt: object.timeCreated ?? new Date().toISOString(),
-      searchText: object.searchText,
     };
-    if (needsPhotoIndex(object)) {
-      c.executionCtx.waitUntil(
-        indexPhoto(config, c.env, object).catch((error: unknown) => {
-          console.error("Photo indexing failed", {
-            name: object.name,
-            error: error instanceof Error ? error.message : String(error),
-          });
-        }),
-      );
-    }
     return c.json(response);
   });
 

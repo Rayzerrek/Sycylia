@@ -9,7 +9,6 @@ export interface FileInfo {
   readonly mimeType: string;
   readonly type: GalleryType;
   readonly createdAt: string;
-  readonly searchText: string | undefined;
 }
 
 export interface Pagination {

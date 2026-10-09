@@ -1,9 +1,7 @@
 import { Hono } from "hono";
 
 import { getAccessToken } from "../gcs/auth.ts";
-import { listGalleryObjects } from "../lib/gallery-cache.ts";
 import { adminMiddleware } from "../middleware/admin.ts";
-import { indexPhoto, needsPhotoIndex } from "../search/photo-index.ts";
 
 import type { Config } from "../env.ts";
 
@@ -61,27 +59,6 @@ export function adminRoute(config: Config): Hono<{ Bindings: Env }> {
       );
     }
     return c.json({ success: true, origins });
-  });
-
-  app.post("/index-photos", async (c) => {
-    const pending = (await listGalleryObjects(config)).filter(needsPhotoIndex);
-    const batch = pending.slice(0, 3);
-    let indexed = 0;
-    const failures: { name: string; error: string }[] = [];
-    for (const object of batch) {
-      try {
-        await indexPhoto(config, c.env, object);
-        indexed += 1;
-      } catch (error) {
-        failures.push({
-          name: object.name,
-          error:
-            error instanceof Error ? error.message : "Photo indexing failed",
-        });
-      }
-    }
-    c.header("Cache-Control", "no-store");
-    return c.json({ indexed, remaining: pending.length - indexed, failures });
   });
 
   return app;

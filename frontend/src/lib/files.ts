@@ -10,7 +10,6 @@ export interface FileEntry {
   mimeType: string | undefined;
   type: FileEntryType;
   createdAt: string;
-  searchText: string | undefined;
 }
 
 export interface Pagination {
@@ -156,7 +155,6 @@ export function decodeFileEntry(value: unknown): FileEntry | undefined {
     thumbUrl: optionalString(getProp(value, "thumbUrl")),
     previewUrl: optionalString(getProp(value, "previewUrl")),
     mimeType: optionalString(getProp(value, "mimeType")),
-    searchText: optionalString(getProp(value, "searchText")),
     type: getProp(value, "type") === "video" ? "video" : "image",
     createdAt:
       optionalString(getProp(value, "createdAt")) ?? new Date().toISOString(),

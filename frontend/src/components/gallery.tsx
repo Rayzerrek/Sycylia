@@ -1,16 +1,10 @@
 "use client";
 
-import {
-  DownloadSimpleIcon,
-  PlayIcon,
-  HeartIcon,
-  ArrowCounterClockwiseIcon,
-} from "@phosphor-icons/react";
+import { DownloadSimpleIcon, PlayIcon, HeartIcon } from "@phosphor-icons/react";
 import GalleryLightbox from "@/components/gallery-lightbox";
 import { useCallback, useEffect, useMemo, useRef, useState, memo } from "react";
 
 import { downloadFile, fetchAllFiles, fetchFiles } from "@/lib/files";
-import { matchesPhotoSearch } from "@/lib/photo-search";
 import { useFavorites } from "@/lib/favorites";
 import { GalleryHeader } from "@/components/gallery-header";
 import { ControlDock } from "@/components/control-dock";
@@ -55,9 +49,6 @@ export default function Gallery({ className }: GalleryProps) {
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState("");
   const [pagination, setPagination] = useState<Pagination>(DEFAULT_PAGINATION);
-
-  const [searchQuery, setSearchQuery] = useState("");
-  const [searching, setSearching] = useState(false);
 
   const { isFav, toggle: toggleFav } = useFavorites();
 
@@ -121,28 +112,9 @@ export default function Gallery({ className }: GalleryProps) {
       if (err instanceof Error && err.name === "AbortError") return;
       console.error("Fetch all files error:", err);
       fetchedAllRef.current = false;
-      setError("Nie udało się przeszukać całej galerii. Spróbuj ponownie.");
+      setError("Nie udało się pobrać całej galerii. Spróbuj ponownie.");
     }
   }, []);
-
-  useEffect(() => {
-    if (!searchQuery.trim() || allFiles !== null) {
-      setSearching(false);
-      return;
-    }
-    const controller = new AbortController();
-    setSearching(true);
-    setError("");
-    const timeout = window.setTimeout(() => {
-      void loadAllFiles(controller.signal).finally(() => {
-        if (!controller.signal.aborted) setSearching(false);
-      });
-    }, 250);
-    return () => {
-      window.clearTimeout(timeout);
-      controller.abort();
-    };
-  }, [searchQuery, allFiles, loadAllFiles]);
 
   const loadNextPage = () => {
     if (loadingMore || !pagination.hasNextPage) return;
@@ -228,12 +200,6 @@ export default function Gallery({ className }: GalleryProps) {
     [lightboxFiles],
   );
 
-  const displayedFiles = useMemo(() => {
-    if (!searchQuery.trim()) return files;
-    if (allFiles === null) return [];
-    return allFiles.filter((file) => matchesPhotoSearch(file, searchQuery));
-  }, [files, allFiles, searchQuery]);
-
   return (
     <div className={className}>
       {/* Minimalist Gallery Header */}
@@ -246,12 +212,10 @@ export default function Gallery({ className }: GalleryProps) {
 
       {/* Minimalist Controls */}
       <ControlDock
-        searchQuery={searchQuery}
-        onSearchQueryChange={setSearchQuery}
-        slideshowDisabled={displayedFiles.length === 0}
+        slideshowDisabled={files.length === 0}
         onStartSlideshow={() => {
-          if (displayedFiles.length > 0) {
-            const first = displayedFiles[0];
+          if (files.length > 0) {
+            const first = files[0];
             handleOpen(first.name, true);
           }
         }}
@@ -264,7 +228,7 @@ export default function Gallery({ className }: GalleryProps) {
       )}
 
       <section aria-label="Galeria zdjęć">
-        {loading || searching ? (
+        {loading ? (
           <div className="columns-2 sm:columns-3 md:columns-4 gap-3 sm:gap-4">
             {SKELETON_KEYS.map((key, i) => (
               <div
@@ -279,7 +243,7 @@ export default function Gallery({ className }: GalleryProps) {
               />
             ))}
           </div>
-        ) : error ? null : files.length === 0 && !searchQuery.trim() ? (
+        ) : error ? null : files.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-rule bg-paper-card p-12 text-center shadow-xs">
             <p className="font-serif italic text-xl text-ink">
               Jeszcze tu pusto…
@@ -288,25 +252,11 @@ export default function Gallery({ className }: GalleryProps) {
               Dodaj pierwsze zdjęcia i filmy powyżej.
             </p>
           </div>
-        ) : displayedFiles.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-rule bg-paper-card p-12 text-center shadow-xs">
-            <p className="font-serif italic text-lg text-ink">
-              Brak wyników wyszukiwania.
-            </p>
-            <button
-              type="button"
-              onClick={() => setSearchQuery("")}
-              className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-ink text-paper text-xs font-mono tracking-wider cursor-pointer shadow-xs hover:opacity-90"
-            >
-              <ArrowCounterClockwiseIcon size={14} />
-              <span>Wyczyść wyszukiwanie</span>
-            </button>
-          </div>
         ) : (
           <>
             {/* Main Gallery Grid */}
             <GalleryGrid
-              files={displayedFiles}
+              files={files}
               onOpen={handleOpen}
               onDownload={handleDownload}
               isFav={isFav}
@@ -314,7 +264,7 @@ export default function Gallery({ className }: GalleryProps) {
             />
 
             {/* Pagination Button */}
-            {pagination.hasNextPage && !searchQuery && (
+            {pagination.hasNextPage && (
               <div className="flex justify-center pt-10 pb-6">
                 <button
                   type="button"

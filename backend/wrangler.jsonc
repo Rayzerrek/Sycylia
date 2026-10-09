@@ -26,9 +26,6 @@
       "/admin/*",
     ]
   },
-  "ai": {
-    "binding": "AI",
-  },
   "images": {
     "binding": "IMAGES",
   },

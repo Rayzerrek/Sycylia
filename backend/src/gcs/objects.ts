@@ -16,7 +16,6 @@ export interface StorageObject {
   readonly name: string;
   readonly contentType: string | undefined;
   readonly timeCreated: string | undefined;
-  readonly searchText: string | undefined;
 }
 
 export interface ListResult {
@@ -64,7 +63,6 @@ export async function listRootObjects(
     name: readString(item, "name") ?? "",
     contentType: readString(item, "contentType"),
     timeCreated: readString(item, "timeCreated"),
-    searchText: readString(readProperty(item, "metadata"), "gallerySearchV1"),
   }));
   const nextPageToken = readString(payload, "nextPageToken");
   return { objects, nextPageToken: nextPageToken ?? undefined };
@@ -92,10 +90,6 @@ export async function getObjectMetadata(
     name: readString(payload, "name") ?? objectName,
     contentType: readString(payload, "contentType"),
     timeCreated: readString(payload, "timeCreated"),
-    searchText: readString(
-      readProperty(payload, "metadata"),
-      "gallerySearchV1",
-    ),
   };
 }
 
@@ -133,29 +127,4 @@ function readProperty(value: unknown, key: string): unknown {
   if (typeof value !== "object" || value === null || Array.isArray(value))
     return undefined;
   return Reflect.get(value, key);
-}
-
-/** Save AI search text on an existing image without replacing its media data. */
-export async function savePhotoSearchText(
-  config: Config,
-  objectName: string,
-  searchText: string,
-): Promise<void> {
-  const token = await getAccessToken(config.serviceAccount);
-  const url =
-    jsonApi +
-    "/b/" +
-    encodeURIComponent(config.bucket) +
-    "/o/" +
-    encodeURIComponent(objectName);
-  const response = await fetch(url, {
-    method: "PATCH",
-    headers: {
-      Authorization: "Bearer " + token,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ metadata: { gallerySearchV1: searchText } }),
-  });
-  if (!response.ok)
-    throw new Error("Photo search metadata save failed: " + response.status);
 }

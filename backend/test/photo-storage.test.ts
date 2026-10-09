@@ -19,8 +19,8 @@ const config: Config = {
   },
 };
 afterEach(() => vi.restoreAllMocks());
-describe("stored photo search metadata", () => {
-  it("lists old photos with no custom metadata alongside indexed photos", async () => {
+describe("photo storage metadata", () => {
+  it("lists photos while ignoring obsolete search metadata", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
       Response.json({
         items: [
@@ -35,16 +35,18 @@ describe("stored photo search metadata", () => {
     );
     const result = await listRootObjects(config, { bucket: config.bucket });
     expect(result.objects).toMatchObject([
-      { name: "old.jpg", searchText: undefined },
-      { name: "indexed.jpg", searchText: "pies" },
+      { name: "old.jpg", contentType: "image/jpeg" },
+      { name: "indexed.jpg", contentType: "image/jpeg" },
     ]);
   });
-  it("reads search text from custom metadata without trusting non-string values", async () => {
+  it("ignores malformed obsolete custom metadata", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
       Response.json({ name: "invalid.jpg", metadata: { gallerySearchV1: 42 } }),
     );
-    expect(
-      (await getObjectMetadata(config, "invalid.jpg")).searchText,
-    ).toBeUndefined();
+    expect(await getObjectMetadata(config, "invalid.jpg")).toEqual({
+      name: "invalid.jpg",
+      contentType: undefined,
+      timeCreated: undefined,
+    });
   });
 });
