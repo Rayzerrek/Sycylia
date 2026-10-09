@@ -6,14 +6,15 @@ import {
   HeartIcon,
   ArrowCounterClockwiseIcon,
 } from "@phosphor-icons/react";
-import dynamic from "next/dynamic";
+import GalleryLightbox from "@/components/gallery-lightbox";
 import {
   useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
-  Suspense,
+  memo,
+  useDeferredValue,
 } from "react";
 
 import { downloadFile, fetchAllFiles, fetchFiles } from "@/lib/files";
@@ -25,10 +26,6 @@ import Upload from "@/components/upload";
 
 import type { FileEntry, Pagination } from "@/lib/files";
 import type { Slide } from "yet-another-react-lightbox";
-
-const GalleryLightbox = dynamic(() => import("@/components/gallery-lightbox"), {
-  ssr: false,
-});
 
 const PAGE_SIZE = 24;
 const SKELETON_KEYS = [
@@ -61,7 +58,6 @@ export default function Gallery({ className }: GalleryProps) {
   const [files, setFiles] = useState<FileEntry[]>([]);
   const [allFiles, setAllFiles] = useState<FileEntry[] | null>(null);
   const [index, setIndex] = useState(-1);
-  const [everOpened, setEverOpened] = useState(false);
   const [autoPlaySlideshow, setAutoPlaySlideshow] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -72,6 +68,7 @@ export default function Gallery({ className }: GalleryProps) {
   const [viewMode, setViewMode] = useState<ViewMode>("editorial");
   const [sortMode, setSortMode] = useState<SortMode>("newest");
   const [searchQuery, setSearchQuery] = useState("");
+  const deferredSearchQuery = useDeferredValue(searchQuery);
 
   const { isFav, toggle: toggleFav } = useFavorites();
 
@@ -172,7 +169,6 @@ export default function Gallery({ className }: GalleryProps) {
 
       setAutoPlaySlideshow(playSlideshow);
       setIndex(lightboxIdx);
-      setEverOpened(true);
 
       if (allFilesRef.current === null && !fetchedAllRef.current) {
         fetchedAllRef.current = true;
@@ -228,8 +224,8 @@ export default function Gallery({ className }: GalleryProps) {
     let result = [...files];
 
     // Filter by search query
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase().trim();
+    if (deferredSearchQuery.trim()) {
+      const q = deferredSearchQuery.toLowerCase().trim();
       result = result.filter((f) => {
         const nameMatch = f.name.toLowerCase().includes(q);
         const dateMatch = f.createdAt?.toLowerCase().includes(q);
@@ -250,20 +246,10 @@ export default function Gallery({ className }: GalleryProps) {
         const db = b.createdAt ? new Date(b.createdAt).getTime() : 0;
         return db - da;
       });
-    } else if (sortMode === "random") {
-      result.sort((a, b) => {
-        const ha = a.name
-          .split("")
-          .reduce((acc, c) => acc + c.charCodeAt(0), 0);
-        const hb = b.name
-          .split("")
-          .reduce((acc, c) => acc + c.charCodeAt(0), 0);
-        return (ha % 17) - (hb % 17);
-      });
     }
 
     return result;
-  }, [files, searchQuery, sortMode]);
+  }, [files, deferredSearchQuery, sortMode]);
 
   return (
     <div className={className}>
@@ -271,7 +257,7 @@ export default function Gallery({ className }: GalleryProps) {
       <GalleryHeader totalCount={pagination.total || files.length} />
 
       {/* Sleek low-profile upload bar */}
-      <div className="mb-6 w-full">
+      <div className="w-full">
         <Upload onUploaded={handleUploaded} />
       </div>
 
@@ -283,6 +269,7 @@ export default function Gallery({ className }: GalleryProps) {
         onSortModeChange={setSortMode}
         searchQuery={searchQuery}
         onSearchQueryChange={setSearchQuery}
+        slideshowDisabled={displayedFiles.length === 0}
         onStartSlideshow={() => {
           if (displayedFiles.length > 0) {
             const first = displayedFiles[0];
@@ -374,18 +361,14 @@ export default function Gallery({ className }: GalleryProps) {
         )}
       </section>
 
-      {everOpened && (
-        <Suspense fallback={null}>
-          <GalleryLightbox
-            open={index >= 0}
-            index={index}
-            files={lightboxFiles}
-            slides={slides}
-            onClose={handleClose}
-            onIndexChange={setIndex}
-            autoPlaySlideshow={autoPlaySlideshow}
-          />
-        </Suspense>
+      {index >= 0 && (
+        <GalleryLightbox
+          index={index}
+          slides={slides}
+          onClose={handleClose}
+          onIndexChange={setIndex}
+          autoPlaySlideshow={autoPlaySlideshow}
+        />
       )}
     </div>
   );
@@ -408,38 +391,22 @@ function GalleryGrid({
   readonly onToggleFavorite: (fileName: string) => boolean;
   readonly viewMode: ViewMode;
 }) {
-  if (viewMode === "showcase") {
-    return (
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
-        {files.map((file, i) => {
-          const origIdx = originalFiles.findIndex((f) => f.name === file.name);
-          return (
-            <GalleryCard
-              key={file.name}
-              file={file}
-              index={origIdx >= 0 ? origIdx : i}
-              onOpen={onOpen}
-              onDownload={onDownload}
-              isFavorite={isFav(file.name)}
-              onToggleFavorite={onToggleFavorite}
-              aspectRatioClass="aspect-[16/10]"
-            />
-          );
-        })}
-      </div>
-    );
-  }
+  const originalIndices = useMemo(
+    () => new Map(originalFiles.map((file, index) => [file.name, index])),
+    [originalFiles],
+  );
 
   if (viewMode === "grid") {
     return (
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5 sm:gap-3 lg:gap-4">
         {files.map((file, i) => {
-          const origIdx = originalFiles.findIndex((f) => f.name === file.name);
+          const origIdx = originalIndices.get(file.name) ?? i;
           return (
             <GalleryCard
               key={file.name}
               file={file}
-              index={origIdx >= 0 ? origIdx : i}
+              index={origIdx}
+              eager={i < 4}
               onOpen={onOpen}
               onDownload={onDownload}
               isFavorite={isFav(file.name)}
@@ -456,12 +423,13 @@ function GalleryGrid({
   return (
     <div className="columns-2 sm:columns-3 md:columns-4 gap-2.5 sm:gap-3 lg:gap-4 space-y-2.5 sm:space-y-3 lg:space-y-4">
       {files.map((file, i) => {
-        const origIdx = originalFiles.findIndex((f) => f.name === file.name);
+        const origIdx = originalIndices.get(file.name) ?? i;
         return (
           <div key={file.name} className="break-inside-avoid">
             <GalleryCard
               file={file}
-              index={origIdx >= 0 ? origIdx : i}
+              index={origIdx}
+              eager={i < 4}
               onOpen={onOpen}
               onDownload={onDownload}
               isFavorite={isFav(file.name)}
@@ -474,7 +442,7 @@ function GalleryGrid({
   );
 }
 
-function GalleryCard({
+const GalleryCard = memo(function GalleryCard({
   file,
   index,
   onOpen,
@@ -482,6 +450,7 @@ function GalleryCard({
   isFavorite,
   onToggleFavorite,
   aspectRatioClass = "",
+  eager,
 }: {
   readonly file: FileEntry;
   readonly index: number;
@@ -490,10 +459,11 @@ function GalleryCard({
   readonly isFavorite: boolean;
   readonly onToggleFavorite: (fileName: string) => boolean;
   readonly aspectRatioClass?: string;
+  readonly eager: boolean;
 }) {
   return (
     <div
-      className={`relative group overflow-hidden rounded-xl border border-rule bg-paper-card shadow-2xs transition-all duration-300 hover:shadow-md hover:border-rule-strong ${aspectRatioClass}`}
+      className={`gallery-card relative group overflow-hidden rounded-lg bg-paper-muted ${aspectRatioClass}`}
     >
       <button
         type="button"
@@ -505,11 +475,22 @@ function GalleryCard({
       >
         {file.type === "video" ? (
           <div className="relative w-full h-full overflow-hidden bg-neutral-900">
-            <VideoThumb
-              src={file.previewUrl ?? file.url}
-              fallbackSrc={file.url}
-              className="w-full h-full object-cover transition-transform duration-500 ease-out group-hover:scale-[1.02]"
-            />
+            {file.thumbUrl ? (
+              // biome-ignore lint/performance/noImgElement: backend generates video posters
+              <img
+                src={file.thumbUrl}
+                alt={file.name}
+                loading={eager ? "eager" : "lazy"}
+                decoding="async"
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <VideoThumb
+                src={file.previewUrl ?? file.url}
+                fallbackSrc={file.url}
+                className="w-full h-full object-cover transition-transform duration-500 ease-out group-hover:scale-[1.02]"
+              />
+            )}
             {/* Pure clean play icon with no darkening scrim */}
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
               <span className="flex size-10 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur-md transition-transform duration-300 group-hover:scale-110">
@@ -525,11 +506,15 @@ function GalleryCard({
           // biome-ignore lint/performance/noImgElement: dynamic thumbnails from cloud backend
           <img
             src={file.thumbUrl ?? file.url}
-            alt=""
-            className="w-full h-auto object-cover transition-transform duration-500 ease-out group-hover:scale-[1.02]"
-            loading={index < 8 ? "eager" : "lazy"}
+            alt={file.name}
+            className={
+              aspectRatioClass
+                ? "w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.025]"
+                : "w-full h-auto object-cover transition-transform duration-300 group-hover:scale-[1.025]"
+            }
+            loading={eager ? "eager" : "lazy"}
             decoding="async"
-            fetchPriority={index < 8 ? "high" : "low"}
+            fetchPriority={eager ? "auto" : "low"}
             onError={(e) => {
               const el = e.currentTarget;
               if (el.dataset.fallback === "1" || !file.url) return;
@@ -550,10 +535,11 @@ function GalleryCard({
         className={`absolute top-2 left-2 size-7 rounded-full backdrop-blur-md flex items-center justify-center transition-all duration-200 z-10 cursor-pointer ${
           isFavorite
             ? "bg-rose-500 text-white opacity-100 scale-100 shadow-sm"
-            : "bg-black/30 hover:bg-black/60 text-white opacity-0 group-hover:opacity-100 hover:scale-110"
+            : "bg-black/30 hover:bg-black/60 text-white opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100 hover:scale-110"
         }`}
         title={isFavorite ? "Usuń z ulubionych" : "Dodaj do ulubionych"}
-        aria-label="Polub kadr"
+        aria-label={isFavorite ? "Usuń z ulubionych" : "Dodaj do ulubionych"}
+        aria-pressed={isFavorite}
       >
         <HeartIcon
           size={13}
@@ -563,7 +549,7 @@ function GalleryCard({
       </button>
 
       {/* Top Right: Subtle Download Button */}
-      <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-10">
+      <div className="absolute top-2 right-2 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100 transition-opacity duration-200 z-10">
         <button
           type="button"
           onClick={(e) => {
@@ -579,7 +565,7 @@ function GalleryCard({
       </div>
     </div>
   );
-}
+});
 
 function preloadPreview(file: FileEntry) {
   const previewUrl =

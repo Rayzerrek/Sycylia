@@ -135,7 +135,8 @@ function decodeFileList(rawFiles: unknown): FileEntry[] {
   return files;
 }
 
-function decodeFileEntry(value: unknown): FileEntry | undefined {
+/** Decode file metadata from an external API response. */
+export function decodeFileEntry(value: unknown): FileEntry | undefined {
   if (typeof value !== "object" || value === null) {
     return undefined;
   }

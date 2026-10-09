@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { Fraunces, Outfit } from "next/font/google";
-import { SmoothScroll } from "@/components/smooth-scroll";
 import "./globals.css";
 
 const outfit = Outfit({
@@ -33,8 +32,8 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           }}
         />
       </head>
-      <body className="min-h-screen flex flex-col bg-paper text-ink selection:bg-ink selection:text-paper">
-        <SmoothScroll>{children}</SmoothScroll>
+      <body className="min-h-screen flex flex-col bg-paper text-ink">
+        {children}
       </body>
     </html>
   );

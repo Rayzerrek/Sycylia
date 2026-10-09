@@ -1,16 +1,9 @@
 "use client";
 
-import {
-  UploadSimpleIcon,
-  BellIcon,
-  BellRingingIcon,
-  CheckCircleIcon,
-  XIcon,
-} from "@phosphor-icons/react";
+import { UploadSimpleIcon, CheckCircleIcon } from "@phosphor-icons/react";
 import {
   type ChangeEvent,
   type DragEvent,
-  useCallback,
   useEffect,
   useRef,
   useState,
@@ -23,7 +16,7 @@ import {
   needsVideoConversion,
   prepareFileForUpload,
 } from "@/lib/convert";
-import type { FileEntry, FileEntryType } from "@/lib/files";
+import { decodeFileEntry, type FileEntry } from "@/lib/files";
 
 const acceptAttribute = [
   "image/jpeg",
@@ -55,16 +48,6 @@ const acceptedExtension =
 const maxFiles = 100;
 const genericContentType = "application/octet-stream";
 
-interface InitiateResponse {
-  uploadUrl: string;
-  method: "PUT";
-  headers: Record<string, string>;
-  storageName: string;
-  mimeType: string;
-  type: FileEntryType;
-  expiresInSeconds: number;
-}
-
 export interface UploadProps {
   readonly onUploaded?: (file: FileEntry) => void;
 }
@@ -79,28 +62,18 @@ export default function Upload({ onUploaded }: UploadProps) {
   const [justCompletedCount, setJustCompletedCount] = useState<number | null>(
     null,
   );
-  const [notificationPermission, setNotificationPermission] =
-    useState<NotificationPermission>(() => {
-      if (typeof window !== "undefined" && "Notification" in window) {
-        return Notification.permission;
-      }
-      return "default";
-    });
-
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Request notification permissions
-  const requestNotifications = useCallback(async () => {
-    if (typeof window === "undefined" || !("Notification" in window)) return;
-    try {
-      const perm = await Notification.requestPermission();
-      setNotificationPermission(perm);
-    } catch {
-      // ignore
-    }
-  }, []);
+  const uploadActiveRef = useRef(false);
+  const dragDepthRef = useRef(0);
+
+  useEffect(() => {
+    if (justCompletedCount === null) return;
+    const timeout = window.setTimeout(() => setJustCompletedCount(null), 5000);
+    return () => window.clearTimeout(timeout);
+  }, [justCompletedCount]);
 
   // Beforeunload protection while uploads are running
   useEffect(() => {
@@ -126,6 +99,7 @@ export default function Upload({ onUploaded }: UploadProps) {
   }, [uploading, progress, currentFileIdx, totalFilesCount]);
 
   const handleFiles = async (fileList: File[]) => {
+    if (uploadActiveRef.current) return;
     const valid = fileList.filter(isAcceptedFile);
     if (valid.length === 0) {
       if (fileList.length) {
@@ -136,18 +110,10 @@ export default function Upload({ onUploaded }: UploadProps) {
       return;
     }
 
-    // Auto-request notifications if default so user gets alerted on completion
-    if (
-      typeof window !== "undefined" &&
-      "Notification" in window &&
-      Notification.permission === "default"
-    ) {
-      void requestNotifications();
-    }
-
     const skipped = Math.max(0, valid.length - maxFiles);
     const files = valid.slice(0, maxFiles);
 
+    uploadActiveRef.current = true;
     setUploading(true);
     setProgress(0);
     setError("");
@@ -215,33 +181,11 @@ export default function Upload({ onUploaded }: UploadProps) {
       }
     }
 
+    uploadActiveRef.current = false;
     setUploading(false);
 
     if (successCount > 0) {
       setJustCompletedCount(successCount);
-
-      // Trigger desktop notification if tab is in background or permission granted
-      if (
-        typeof window !== "undefined" &&
-        "Notification" in window &&
-        Notification.permission === "granted"
-      ) {
-        try {
-          new Notification("Przesyłanie zakończone! 📸", {
-            body: `Pomyślnie wysłano ${successCount} ${
-              successCount === 1 ? "plik" : "plików"
-            } do galerii zdjęć.`,
-            icon: "/favicon.ico",
-          });
-        } catch {
-          // notification failed
-        }
-      }
-
-      // Auto-dismiss the completed pill after 5 seconds
-      setTimeout(() => {
-        setJustCompletedCount(null);
-      }, 5000);
     }
 
     if (conversionSkipped > 0) {
@@ -263,6 +207,7 @@ export default function Upload({ onUploaded }: UploadProps) {
 
   const handleDrop = (e: DragEvent) => {
     e.preventDefault();
+    dragDepthRef.current = 0;
     setDragOver(false);
     const dropped = e.dataTransfer.files ? [...e.dataTransfer.files] : [];
     void handleFiles(dropped);
@@ -275,179 +220,105 @@ export default function Upload({ onUploaded }: UploadProps) {
   };
 
   return (
-    <>
-      {/* biome-ignore lint/a11y/noStaticElementInteractions: file dropzone — keyboard users get the equivalent button + file input below. */}
+    <section className="upload-section" aria-label="Dodawanie zdjęć i filmów">
+      {/* biome-ignore lint/a11y/noStaticElementInteractions: keyboard users have the file picker button. */}
       <div
-        className={`relative flex items-center justify-between gap-4 rounded-xl border border-dashed p-3 sm:px-5 sm:py-3.5 transition-all duration-200 group ${
-          dragOver
-            ? "border-ink bg-paper scale-[1.005] shadow-xs"
-            : "border-rule bg-paper-card/70 hover:bg-paper-card hover:border-rule-strong"
-        }`}
-        onDragOver={(e) => {
-          e.preventDefault();
-          setDragOver(true);
+        className={dragOver ? "upload-zone upload-zone-active" : "upload-zone"}
+        onDragEnter={(event) => {
+          event.preventDefault();
+          dragDepthRef.current += 1;
+          if (!uploadActiveRef.current) setDragOver(true);
         }}
-        onDragLeave={() => setDragOver(false)}
+        onDragOver={(event) => {
+          event.preventDefault();
+          event.dataTransfer.dropEffect = uploadActiveRef.current
+            ? "none"
+            : "copy";
+        }}
+        onDragLeave={() => {
+          dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+          if (dragDepthRef.current === 0) setDragOver(false);
+        }}
         onDrop={handleDrop}
       >
-        {uploading ? (
-          // biome-ignore lint/a11y/useSemanticElements: live region for upload progress
-          <div
-            className="flex items-center justify-between gap-4 w-full py-1 text-xs font-mono"
-            role="status"
-            aria-live="polite"
+        <div className="upload-symbol" aria-hidden="true">
+          <UploadSimpleIcon size={24} weight="light" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <h2 className="text-base sm:text-lg font-medium tracking-tight">
+            {uploading
+              ? "Dodawanie plików"
+              : dragOver
+                ? "Upuść pliki tutaj"
+                : "Dodaj do galerii"}
+          </h2>
+          <p className="mt-1 text-sm text-ink-muted">
+            {uploading
+              ? "Plik " +
+                currentFileIdx +
+                " z " +
+                totalFilesCount +
+                " · " +
+                progress +
+                "%"
+              : "Przeciągnij zdjęcia i filmy lub wybierz je z urządzenia."}
+          </p>
+          <p
+            className={
+              uploading
+                ? "mt-2 text-xs text-ink-muted truncate"
+                : "mt-2 text-xs text-ink-muted"
+            }
           >
-            <div className="flex items-center gap-3 min-w-0">
-              <span className="relative flex size-2 shrink-0">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-ink opacity-75" />
-                <span className="relative inline-flex size-2 rounded-full bg-ink" />
-              </span>
-              <div className="truncate">
-                <span className="font-semibold text-ink">
-                  Wysyłanie [{currentFileIdx}/{totalFilesCount}]
-                </span>
-                <span className="text-ink-muted ml-2 truncate hidden sm:inline">
-                  {currentFileName}
-                </span>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3 shrink-0">
-              <div className="w-24 sm:w-36 h-1.5 rounded-full bg-paper border border-rule overflow-hidden">
-                <div
-                  className="h-full bg-ink transition-all duration-200 rounded-full"
-                  style={{ width: `${progress}%` }}
-                />
-              </div>
-              <span className="tabular-nums font-semibold text-ink text-xs w-9 text-right">
-                {progress}%
-              </span>
-            </div>
-          </div>
-        ) : (
-          <>
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-rule bg-paper text-ink transition-transform duration-200 group-hover:scale-105">
-                <UploadSimpleIcon size={15} weight="regular" />
-              </div>
-              <div className="truncate text-left">
-                <p className="text-xs font-medium text-ink truncate">
-                  Przeciągnij zdjęcia lub filmy tutaj
-                </p>
-                <p className="text-[11px] font-mono text-ink-muted truncate">
-                  JPG, PNG, HEIC, MP4, MOV · do {maxFiles} plików
-                </p>
-              </div>
-            </div>
-
-            <button
-              type="button"
-              className="shrink-0 flex items-center gap-1.5 rounded-full bg-ink px-4 py-1.5 text-xs font-mono tracking-wider text-paper transition-all hover:opacity-90 active:scale-[0.98] cursor-pointer shadow-xs"
-              onClick={() => inputRef.current?.click()}
-            >
-              <UploadSimpleIcon size={13} weight="bold" />
-              <span>Wybierz pliki</span>
-            </button>
-
-            <input
-              ref={inputRef}
-              type="file"
-              accept={acceptAttribute}
-              className="hidden"
-              multiple
-              onChange={handleFileSelect}
-            />
-          </>
+            {uploading
+              ? currentFileName
+              : "JPG, PNG, HEIC, MP4, MOV i inne · do " +
+                maxFiles +
+                " plików naraz"}
+          </p>
+        </div>
+        <button
+          type="button"
+          className="upload-button"
+          disabled={uploading}
+          onClick={() => inputRef.current?.click()}
+        >
+          {uploading ? "Przesyłanie…" : "Wybierz pliki"}
+          <span aria-hidden="true">↗</span>
+        </button>
+        <input
+          ref={inputRef}
+          type="file"
+          accept={acceptAttribute}
+          className="hidden"
+          multiple
+          disabled={uploading}
+          onChange={handleFileSelect}
+        />
+        {uploading && (
+          <progress
+            className="upload-progress"
+            value={progress}
+            max={100}
+            aria-label="Postęp przesyłania"
+          />
+        )}
+      </div>
+      <div aria-live="polite" className="upload-feedback">
+        {justCompletedCount !== null && !uploading && (
+          <p className="flex items-center gap-2 text-sm text-ink">
+            <CheckCircleIcon size={18} /> Dodano {justCompletedCount}{" "}
+            {justCompletedCount === 1 ? "plik" : "plików"} do galerii.
+          </p>
         )}
         {error && (
-          <p className="mt-4 text-xs font-mono text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2 max-w-sm">
+          <p role="alert" className="text-sm text-red-700 dark:text-red-300">
             {error}
           </p>
         )}
-        {notice && (
-          <p className="mt-4 text-xs font-mono text-amber-800 bg-amber-50 border border-amber-300 rounded-lg px-3 py-2 max-w-sm">
-            {notice}
-          </p>
-        )}
+        {notice && <p className="text-sm text-ink-muted">{notice}</p>}
       </div>
-
-      {/* Floating Background Upload Dock (Active while scrolling anywhere on the page) */}
-      {uploading && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 w-[92vw] max-w-md rounded-2xl bg-neutral-900/95 border border-white/15 p-4 text-neutral-100 shadow-2xl backdrop-blur-2xl ring-1 ring-black/40 text-xs font-mono animate-rise">
-          <div className="flex items-center justify-between gap-3 mb-2.5">
-            <div className="flex items-center gap-2">
-              <span className="relative flex size-2">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-75" />
-                <span className="relative inline-flex size-2 rounded-full bg-white" />
-              </span>
-              <span className="font-semibold text-neutral-100">
-                WYSYŁANIE W TLE [{currentFileIdx}/{totalFilesCount}]
-              </span>
-            </div>
-
-            <div className="flex items-center gap-2">
-              {notificationPermission !== "granted" ? (
-                <button
-                  type="button"
-                  onClick={requestNotifications}
-                  className="flex items-center gap-1 px-2 py-1 rounded bg-white/10 hover:bg-white/20 text-amber-300 text-[10px] tracking-wider transition-colors cursor-pointer"
-                  title="Włącz powiadomienie, gdy pliki zostaną wysłane"
-                >
-                  <BellIcon size={12} />
-                  <span>POWIADOM MNIE</span>
-                </button>
-              ) : (
-                <span className="flex items-center gap-1 text-[10px] text-stone-400">
-                  <BellRingingIcon size={12} className="text-amber-400" />
-                  <span>POWIADOMIENIE AKTYWNE</span>
-                </span>
-              )}
-              <span className="text-amber-400 font-bold tabular-nums">
-                {progress}%
-              </span>
-            </div>
-          </div>
-
-          {/* Progress bar */}
-          <div className="h-1.5 w-full bg-white/10 rounded-full overflow-hidden">
-            <div
-              className="h-full bg-gradient-to-r from-amber-500 to-amber-300 transition-all duration-300 rounded-full"
-              style={{ width: `${progress}%` }}
-            />
-          </div>
-
-          <p className="mt-2 text-[10px] text-stone-400 truncate">
-            Plik: {currentFileName}
-          </p>
-        </div>
-      )}
-
-      {/* Floating Just Completed Notification Toast */}
-      {justCompletedCount !== null && !uploading && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 flex items-center gap-3 px-5 py-3 rounded-2xl bg-stone-900/95 border border-emerald-500/40 text-stone-100 shadow-2xl backdrop-blur-2xl ring-1 ring-black/40 text-xs font-mono animate-rise">
-          <CheckCircleIcon
-            size={18}
-            weight="fill"
-            className="text-emerald-400 shrink-0"
-          />
-          <div>
-            <p className="font-semibold text-emerald-300">
-              PRZESYŁANIE ZAKOŃCZONE!
-            </p>
-            <p className="text-[10px] text-stone-400">
-              Pomyślnie dodano {justCompletedCount} wspomnień do galerii.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={() => setJustCompletedCount(null)}
-            className="ml-2 p-1 rounded hover:bg-white/10 text-stone-400 hover:text-white"
-          >
-            <XIcon size={14} />
-          </button>
-        </div>
-      )}
-    </>
+    </section>
   );
 }
 
@@ -475,8 +346,9 @@ async function uploadOne(
     );
   }
 
-  const { uploadUrl, headers, storageName } =
-    (await initRes.json()) as InitiateResponse;
+  const { uploadUrl, headers, storageName } = decodeUploadInitiation(
+    await initRes.json(),
+  );
 
   await putToStorage(uploadUrl, file, headers ?? {}, onProgress);
 
@@ -495,22 +367,8 @@ async function uploadOne(
     );
   }
 
-  const rawEntry = (await finRes.json()) as Record<string, unknown>;
-  const entry: FileEntry = {
-    name: typeof rawEntry.name === "string" ? rawEntry.name : storageName,
-    url: typeof rawEntry.url === "string" ? rawEntry.url : "",
-    thumbUrl:
-      typeof rawEntry.thumbUrl === "string" ? rawEntry.thumbUrl : undefined,
-    previewUrl:
-      typeof rawEntry.previewUrl === "string" ? rawEntry.previewUrl : undefined,
-    mimeType:
-      typeof rawEntry.mimeType === "string" ? rawEntry.mimeType : undefined,
-    type: rawEntry.type === "video" ? "video" : "image",
-    createdAt:
-      typeof rawEntry.createdAt === "string"
-        ? rawEntry.createdAt
-        : new Date().toISOString(),
-  };
+  const entry = decodeFileEntry(await finRes.json());
+  if (!entry) throw new Error("Invalid upload finalization response");
   return entry;
 }
 
@@ -556,4 +414,37 @@ function putToStorage(
 
   xhr.send(file);
   return promise;
+}
+
+function decodeUploadInitiation(value: unknown): {
+  uploadUrl: string;
+  storageName: string;
+  headers: Record<string, string>;
+} {
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    !("uploadUrl" in value) ||
+    typeof value.uploadUrl !== "string" ||
+    !("storageName" in value) ||
+    typeof value.storageName !== "string"
+  ) {
+    throw new Error("Invalid upload initiation response");
+  }
+  const headers: Record<string, string> = {};
+  if ("headers" in value && value.headers !== undefined) {
+    if (typeof value.headers !== "object" || value.headers === null) {
+      throw new Error("Invalid upload initiation headers");
+    }
+    for (const [key, header] of Object.entries(value.headers)) {
+      if (typeof header !== "string")
+        throw new Error("Invalid upload initiation header");
+      headers[key] = header;
+    }
+  }
+  return {
+    uploadUrl: value.uploadUrl,
+    storageName: value.storageName,
+    headers,
+  };
 }
