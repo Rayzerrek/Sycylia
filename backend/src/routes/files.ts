@@ -37,7 +37,9 @@ export function filesRoute(config: Config): Hono {
     const totalPages = Math.max(1, Math.ceil(total / pageSize));
     const start = (page - 1) * pageSize;
     const pageFiles = galleryObjects.slice(start, start + pageSize);
-    const files = pageFiles.map((object) => buildFileInfo(object, config, origin));
+    const files = pageFiles.map((object) =>
+      buildFileInfo(object, config, origin),
+    );
     const response: FilesResponse = {
       files,
       pagination: {
@@ -58,7 +60,9 @@ export function filesRoute(config: Config): Hono {
   app.get("/all", async (c) => {
     const origin = new URL(c.req.url).origin;
     const galleryObjects = await listGalleryObjects(config);
-    const files = galleryObjects.map((object) => buildFileInfo(object, config, origin));
+    const files = galleryObjects.map((object) =>
+      buildFileInfo(object, config, origin),
+    );
     c.header("Cache-Control", galleryCacheControl);
     return c.json({ files });
   });
@@ -66,13 +70,18 @@ export function filesRoute(config: Config): Hono {
   return app;
 }
 
-function buildFileInfo(object: StorageObject, config: Config, origin: string): FileInfo {
+function buildFileInfo(
+  object: StorageObject,
+  config: Config,
+  origin: string,
+): FileInfo {
   const mimeType = object.contentType ?? "";
   const type = galleryTypeForMimeType(mimeType);
   const encoded = encodeURIComponent(object.name);
   const url = publicUrl(config.bucket, object.name);
   const createdAt =
-    object.timeCreated ?? new Date(readTimestampFromName(object.name)).toISOString();
+    object.timeCreated ??
+    new Date(readTimestampFromName(object.name)).toISOString();
 
   if (type === "video") {
     return {
@@ -84,6 +93,7 @@ function buildFileInfo(object: StorageObject, config: Config, origin: string): F
       mimeType,
       type: "video",
       createdAt,
+      searchText: object.searchText,
     };
   }
 
@@ -101,5 +111,6 @@ function buildFileInfo(object: StorageObject, config: Config, origin: string): F
     mimeType,
     type: "image",
     createdAt,
+    searchText: object.searchText,
   };
 }

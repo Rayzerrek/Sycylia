@@ -1,7 +1,9 @@
 import { Hono } from "hono";
 
 import { getAccessToken } from "../gcs/auth.ts";
+import { listGalleryObjects } from "../lib/gallery-cache.ts";
 import { adminMiddleware } from "../middleware/admin.ts";
+import { indexPhoto, needsPhotoIndex } from "../search/photo-index.ts";
 
 import type { Config } from "../env.ts";
 
@@ -14,8 +16,8 @@ import type { Config } from "../env.ts";
  * Equivalent gsutil (no Worker needed):
  *   echo '<cors-config>' > cors.json && gsutil cors set cors.json gs://<bucket>
  */
-export function adminRoute(config: Config): Hono {
-  const app = new Hono();
+export function adminRoute(config: Config): Hono<{ Bindings: Env }> {
+  const app = new Hono<{ Bindings: Env }>();
   app.use("/*", adminMiddleware(config));
 
   app.post("/configure-bucket-cors", async (c) => {
@@ -40,7 +42,12 @@ export function adminRoute(config: Config): Hono {
           {
             origin: origins,
             method: ["GET", "PUT", "HEAD"],
-            responseHeader: ["Content-Type", "x-goog-acl", "x-goog-resumable", "Cache-Control"],
+            responseHeader: [
+              "Content-Type",
+              "x-goog-acl",
+              "x-goog-resumable",
+              "Cache-Control",
+            ],
             maxAgeSeconds: 3600,
           },
         ],
@@ -49,9 +56,32 @@ export function adminRoute(config: Config): Hono {
 
     if (!response.ok) {
       const text = await response.text().catch(() => response.statusText);
-      throw new Error(`Konfiguracja CORS nie powiodła się: ${response.status} ${text}`);
+      throw new Error(
+        `Konfiguracja CORS nie powiodła się: ${response.status} ${text}`,
+      );
     }
     return c.json({ success: true, origins });
+  });
+
+  app.post("/index-photos", async (c) => {
+    const pending = (await listGalleryObjects(config)).filter(needsPhotoIndex);
+    const batch = pending.slice(0, 3);
+    let indexed = 0;
+    const failures: { name: string; error: string }[] = [];
+    for (const object of batch) {
+      try {
+        await indexPhoto(config, c.env, object);
+        indexed += 1;
+      } catch (error) {
+        failures.push({
+          name: object.name,
+          error:
+            error instanceof Error ? error.message : "Photo indexing failed",
+        });
+      }
+    }
+    c.header("Cache-Control", "no-store");
+    return c.json({ indexed, remaining: pending.length - indexed, failures });
   });
 
   return app;

@@ -7,17 +7,10 @@ import {
   ArrowCounterClockwiseIcon,
 } from "@phosphor-icons/react";
 import GalleryLightbox from "@/components/gallery-lightbox";
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  memo,
-  useDeferredValue,
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, memo } from "react";
 
 import { downloadFile, fetchAllFiles, fetchFiles } from "@/lib/files";
+import { matchesPhotoSearch } from "@/lib/photo-search";
 import { useFavorites } from "@/lib/favorites";
 import { GalleryHeader } from "@/components/gallery-header";
 import { ControlDock } from "@/components/control-dock";
@@ -64,7 +57,7 @@ export default function Gallery({ className }: GalleryProps) {
   const [pagination, setPagination] = useState<Pagination>(DEFAULT_PAGINATION);
 
   const [searchQuery, setSearchQuery] = useState("");
-  const deferredSearchQuery = useDeferredValue(searchQuery);
+  const [searching, setSearching] = useState(false);
 
   const { isFav, toggle: toggleFav } = useFavorites();
 
@@ -113,6 +106,7 @@ export default function Gallery({ className }: GalleryProps) {
   const loadAllFiles = useCallback(async (signal: AbortSignal) => {
     try {
       const all = await fetchAllFiles(signal);
+      if (signal.aborted) return;
       const currentList = allFilesRef.current ?? filesRef.current;
       const currentName = currentList[indexRef.current]?.name;
       let nextIndex = indexRef.current;
@@ -120,13 +114,35 @@ export default function Gallery({ className }: GalleryProps) {
         const found = all.findIndex((file) => file.name === currentName);
         if (found >= 0) nextIndex = found;
       }
+      setError("");
       setAllFiles(all);
       if (indexRef.current >= 0) setIndex(nextIndex);
     } catch (err) {
       if (err instanceof Error && err.name === "AbortError") return;
       console.error("Fetch all files error:", err);
+      fetchedAllRef.current = false;
+      setError("Nie udało się przeszukać całej galerii. Spróbuj ponownie.");
     }
   }, []);
+
+  useEffect(() => {
+    if (!searchQuery.trim() || allFiles !== null) {
+      setSearching(false);
+      return;
+    }
+    const controller = new AbortController();
+    setSearching(true);
+    setError("");
+    const timeout = window.setTimeout(() => {
+      void loadAllFiles(controller.signal).finally(() => {
+        if (!controller.signal.aborted) setSearching(false);
+      });
+    }, 250);
+    return () => {
+      window.clearTimeout(timeout);
+      controller.abort();
+    };
+  }, [searchQuery, allFiles, loadAllFiles]);
 
   const loadNextPage = () => {
     if (loadingMore || !pagination.hasNextPage) return;
@@ -148,15 +164,12 @@ export default function Gallery({ className }: GalleryProps) {
   }, []);
 
   const handleOpen = useCallback(
-    (i: number, playSlideshow = false) => {
-      const targetName = filesRef.current[i]?.name;
-      let lightboxIdx = i;
-      if (allFilesRef.current && targetName !== undefined) {
-        const found = allFilesRef.current.findIndex(
-          (file) => file.name === targetName,
-        );
-        if (found >= 0) lightboxIdx = found;
-      }
+    (fileName: string, playSlideshow = false) => {
+      const currentFiles = allFilesRef.current ?? filesRef.current;
+      const lightboxIdx = currentFiles.findIndex(
+        (file) => file.name === fileName,
+      );
+      if (lightboxIdx < 0) return;
 
       if (!lightboxOpenRef.current) {
         lightboxOpenRef.current = true;
@@ -215,22 +228,11 @@ export default function Gallery({ className }: GalleryProps) {
     [lightboxFiles],
   );
 
-  // Search the displayed gallery items
   const displayedFiles = useMemo(() => {
-    let result = [...files];
-
-    // Filter by search query
-    if (deferredSearchQuery.trim()) {
-      const q = deferredSearchQuery.toLowerCase().trim();
-      result = result.filter((f) => {
-        const nameMatch = f.name.toLowerCase().includes(q);
-        const dateMatch = f.createdAt?.toLowerCase().includes(q);
-        return nameMatch || dateMatch;
-      });
-    }
-
-    return result;
-  }, [files, deferredSearchQuery]);
+    if (!searchQuery.trim()) return files;
+    if (allFiles === null) return [];
+    return allFiles.filter((file) => matchesPhotoSearch(file, searchQuery));
+  }, [files, allFiles, searchQuery]);
 
   return (
     <div className={className}>
@@ -250,8 +252,7 @@ export default function Gallery({ className }: GalleryProps) {
         onStartSlideshow={() => {
           if (displayedFiles.length > 0) {
             const first = displayedFiles[0];
-            const originalIndex = files.findIndex((f) => f.name === first.name);
-            handleOpen(originalIndex >= 0 ? originalIndex : 0, true);
+            handleOpen(first.name, true);
           }
         }}
       />
@@ -263,7 +264,7 @@ export default function Gallery({ className }: GalleryProps) {
       )}
 
       <section aria-label="Galeria zdjęć">
-        {loading ? (
+        {loading || searching ? (
           <div className="columns-2 sm:columns-3 md:columns-4 gap-3 sm:gap-4">
             {SKELETON_KEYS.map((key, i) => (
               <div
@@ -278,7 +279,7 @@ export default function Gallery({ className }: GalleryProps) {
               />
             ))}
           </div>
-        ) : files.length === 0 ? (
+        ) : error ? null : files.length === 0 && !searchQuery.trim() ? (
           <div className="rounded-2xl border border-dashed border-rule bg-paper-card p-12 text-center shadow-xs">
             <p className="font-serif italic text-xl text-ink">
               Jeszcze tu pusto…
@@ -306,7 +307,6 @@ export default function Gallery({ className }: GalleryProps) {
             {/* Main Gallery Grid */}
             <GalleryGrid
               files={displayedFiles}
-              originalFiles={files}
               onOpen={handleOpen}
               onDownload={handleDownload}
               isFav={isFav}
@@ -352,33 +352,24 @@ export default function Gallery({ className }: GalleryProps) {
 
 function GalleryGrid({
   files,
-  originalFiles,
   onOpen,
   onDownload,
   isFav,
   onToggleFavorite,
 }: {
   readonly files: FileEntry[];
-  readonly originalFiles: FileEntry[];
-  readonly onOpen: (i: number) => void;
+  readonly onOpen: (fileName: string) => void;
   readonly onDownload: (fileName: string) => void;
   readonly isFav: (fileName: string) => boolean;
   readonly onToggleFavorite: (fileName: string) => boolean;
 }) {
-  const originalIndices = useMemo(
-    () => new Map(originalFiles.map((file, index) => [file.name, index])),
-    [originalFiles],
-  );
-
   return (
     <div className="columns-2 sm:columns-3 md:columns-4 gap-2.5 sm:gap-3 lg:gap-4 space-y-2.5 sm:space-y-3 lg:space-y-4">
       {files.map((file, i) => {
-        const origIdx = originalIndices.get(file.name) ?? i;
         return (
           <div key={file.name} className="break-inside-avoid">
             <GalleryCard
               file={file}
-              index={origIdx}
               eager={i < 4}
               onOpen={onOpen}
               onDownload={onDownload}
@@ -394,7 +385,6 @@ function GalleryGrid({
 
 const GalleryCard = memo(function GalleryCard({
   file,
-  index,
   onOpen,
   onDownload,
   isFavorite,
@@ -402,8 +392,7 @@ const GalleryCard = memo(function GalleryCard({
   eager,
 }: {
   readonly file: FileEntry;
-  readonly index: number;
-  readonly onOpen: (i: number) => void;
+  readonly onOpen: (fileName: string) => void;
   readonly onDownload: (fileName: string) => void;
   readonly isFavorite: boolean;
   readonly onToggleFavorite: (fileName: string) => boolean;
@@ -417,7 +406,7 @@ const GalleryCard = memo(function GalleryCard({
         className="cursor-pointer w-full h-full flex flex-col relative overflow-hidden"
         onPointerEnter={() => preloadPreview(file)}
         onFocus={() => preloadPreview(file)}
-        onClick={() => onOpen(index)}
+        onClick={() => onOpen(file.name)}
       >
         {file.type === "video" ? (
           <div className="relative w-full h-full overflow-hidden bg-neutral-900">

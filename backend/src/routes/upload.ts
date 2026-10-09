@@ -11,14 +11,18 @@ import {
   isAnimatedImage,
   isTransformableImage,
 } from "../media/media-types.ts";
+import { indexPhoto, needsPhotoIndex } from "../search/photo-index.ts";
 
 import type { Config } from "../env.ts";
-import type { FinalizeUploadResponse, InitiateUploadResponse } from "../types.ts";
+import type {
+  FinalizeUploadResponse,
+  InitiateUploadResponse,
+} from "../types.ts";
 
 const signedUrlTtlSeconds = 60 * 5;
 
-export function uploadRoute(config: Config): Hono {
-  const app = new Hono();
+export function uploadRoute(config: Config): Hono<{ Bindings: Env }> {
+  const app = new Hono<{ Bindings: Env }>();
 
   app.post("/initiate", async (c) => {
     const body = await c.req.json();
@@ -78,11 +82,24 @@ export function uploadRoute(config: Config): Hono {
       fileName: object.name,
       url: originalUrl,
       thumbUrl: transformable ? `${origin}/thumbnail/${encoded}` : undefined,
-      previewUrl: previewEndpoint ? `${origin}/preview/${encoded}` : originalUrl,
+      previewUrl: previewEndpoint
+        ? `${origin}/preview/${encoded}`
+        : originalUrl,
       mimeType,
       type,
       createdAt: object.timeCreated ?? new Date().toISOString(),
+      searchText: object.searchText,
     };
+    if (needsPhotoIndex(object)) {
+      c.executionCtx.waitUntil(
+        indexPhoto(config, c.env, object).catch((error: unknown) => {
+          console.error("Photo indexing failed", {
+            name: object.name,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }),
+      );
+    }
     return c.json(response);
   });
 

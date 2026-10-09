@@ -22,8 +22,8 @@ export function ControlDock({
         <MagnifyingGlassIcon size={18} aria-hidden="true" />
         <input
           type="search"
-          aria-label="Szukaj po nazwie pliku lub dacie"
-          placeholder="Szukaj zdjęć…"
+          aria-label="Szukaj po zawartości zdjęcia, nazwie lub dacie"
+          placeholder="Szukaj np. pies, samochód…"
           value={searchQuery}
           onChange={(event) => onSearchQueryChange(event.target.value)}
         />

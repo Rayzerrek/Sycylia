@@ -16,6 +16,7 @@ export interface StorageObject {
   readonly name: string;
   readonly contentType: string | undefined;
   readonly timeCreated: string | undefined;
+  readonly searchText: string | undefined;
 }
 
 export interface ListResult {
@@ -31,7 +32,10 @@ export interface ListOptions {
   readonly prefix?: string;
 }
 
-export async function listRootObjects(config: Config, options: ListOptions): Promise<ListResult> {
+export async function listRootObjects(
+  config: Config,
+  options: ListOptions,
+): Promise<ListResult> {
   const token = await getAccessToken(config.serviceAccount);
   const params = new URLSearchParams({
     maxResults: String(options.maxResults ?? 100),
@@ -49,7 +53,9 @@ export async function listRootObjects(config: Config, options: ListOptions): Pro
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!response.ok) {
-    throw new Error(`GCS list failed: ${response.status} ${await safeText(response)}`);
+    throw new Error(
+      `GCS list failed: ${response.status} ${await safeText(response)}`,
+    );
   }
 
   const payload = await response.json();
@@ -58,6 +64,7 @@ export async function listRootObjects(config: Config, options: ListOptions): Pro
     name: readString(item, "name") ?? "",
     contentType: readString(item, "contentType"),
     timeCreated: readString(item, "timeCreated"),
+    searchText: readString(readProperty(item, "metadata"), "gallerySearchV1"),
   }));
   const nextPageToken = readString(payload, "nextPageToken");
   return { objects, nextPageToken: nextPageToken ?? undefined };
@@ -76,13 +83,19 @@ export async function getObjectMetadata(
     throw new ItemNotFoundError(objectName);
   }
   if (!response.ok) {
-    throw new Error(`GCS metadata failed: ${response.status} ${await safeText(response)}`);
+    throw new Error(
+      `GCS metadata failed: ${response.status} ${await safeText(response)}`,
+    );
   }
   const payload = await response.json();
   return {
     name: readString(payload, "name") ?? objectName,
     contentType: readString(payload, "contentType"),
     timeCreated: readString(payload, "timeCreated"),
+    searchText: readString(
+      readProperty(payload, "metadata"),
+      "gallerySearchV1",
+    ),
   };
 }
 
@@ -107,11 +120,42 @@ async function safeText(response: Response): Promise<string> {
 }
 
 function readArrayField(payload: unknown, key: string): unknown[] {
-  const value = (payload as Record<string, unknown>)[key];
+  const value = readProperty(payload, key);
   return Array.isArray(value) ? value : [];
 }
 
 function readString(payload: unknown, key: string): string | undefined {
-  const value = (payload as Record<string, unknown>)[key];
+  const value = readProperty(payload, key);
   return typeof value === "string" ? value : undefined;
+}
+
+function readProperty(value: unknown, key: string): unknown {
+  if (typeof value !== "object" || value === null || Array.isArray(value))
+    return undefined;
+  return Reflect.get(value, key);
+}
+
+/** Save AI search text on an existing image without replacing its media data. */
+export async function savePhotoSearchText(
+  config: Config,
+  objectName: string,
+  searchText: string,
+): Promise<void> {
+  const token = await getAccessToken(config.serviceAccount);
+  const url =
+    jsonApi +
+    "/b/" +
+    encodeURIComponent(config.bucket) +
+    "/o/" +
+    encodeURIComponent(objectName);
+  const response = await fetch(url, {
+    method: "PATCH",
+    headers: {
+      Authorization: "Bearer " + token,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ metadata: { gallerySearchV1: searchText } }),
+  });
+  if (!response.ok)
+    throw new Error("Photo search metadata save failed: " + response.status);
 }
